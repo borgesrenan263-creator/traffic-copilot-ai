@@ -2,35 +2,30 @@ const { analyzeRoute } = require("../services/routeAnalysis")
 
 function trafficAgent(payload){
 
-  const ctx = payload.context || {}
+  const ctx=payload.context||{}
 
-  const origin = ctx.origin
-  const destination = ctx.destination
+  const route=ctx.route
 
-  let answer="Preciso de origem e destino."
+  let answer="Preciso de uma rota para analisar."
 
-  if(origin && destination){
+  if(route){
 
-    const distance=8
-    const duration=10
+    const analysis=analyzeRoute(route.distance,route.duration)
 
-    const analysis=analyzeRoute(distance,duration)
+    const speed=(route.distance/(route.duration/60)).toFixed(1)
 
     answer=
-`Análise de trânsito:
+`Análise da rota:
 
-Rota: ${analysis.distanceKm} km
+Distância: ${analysis.distanceKm} km
 Tempo base: ${analysis.durationMin} min
+Velocidade média: ${speed} km/h
 
 Trânsito: ${analysis.trafficLevel}
-Atraso estimado: +${analysis.estimatedDelay} min
-
-Sugestão:
-Mantenha velocidade constante e evite horários de pico.`
-
+Atraso estimado: +${analysis.estimatedDelay} min`
   }
 
-  return {
+  return{
     answer,
     context:ctx
   }

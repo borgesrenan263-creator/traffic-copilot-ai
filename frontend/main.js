@@ -2,253 +2,136 @@ import "./style.css"
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
 
-const API_BASE = "http://localhost:8787"
-const OSRM_BASE = "https://router.project-osrm.org"
+const API_BASE="http://localhost:8787"
+const OSRM="https://router.project-osrm.org/route/v1/driving"
 
-let origin = null
-let destination = null
+let origin=null
+let destination=null
+let routeInfo=null
 
-let originMarker = null
-let destMarker = null
-let routeLine = null
+const map=L.map("map").setView([-20.84,-49.35],13)
 
-const app = document.querySelector("#app")
-
-app.innerHTML = `
-<div class="container">
-
-<h1>Traffic Copilot AI</h1>
-
-<div id="map"></div>
-
-<div class="controls">
-<button id="btnLocate">📍 Minha localização</button>
-<button id="btnSetDest">🎯 Definir destino</button>
-<button id="btnClear">🧹 Limpar</button>
-
-<div id="coords">
-Origem: —
-<br>
-Destino: —
-</div>
-</div>
-
-<div id="chat">
-<div class="bubble bot">
-Bem-vindo! Defina origem e destino para calcular a rota.
-</div>
-</div>
-
-<div class="inputRow">
-<input id="question" placeholder="Pergunte: Como está o trânsito?" />
-<button id="send">Enviar</button>
-</div>
-
-</div>
-`
-
-const map = L.map("map").setView([-15.78, -47.93], 4)
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
- attribution:"Leaflet | OpenStreetMap"
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  attribution:"© OpenStreetMap"
 }).addTo(map)
 
-function addBubble(text,role="bot"){
- const chat=document.querySelector("#chat")
- const div=document.createElement("div")
- div.className="bubble "+role
- div.innerText=text
- chat.appendChild(div)
- chat.scrollTop=chat.scrollHeight
+let originMarker=null
+let destMarker=null
+let routeLine=null
+
+function log(msg){
+  const box=document.getElementById("chat-log")
+  const div=document.createElement("div")
+  div.className="msg"
+  div.textContent=msg
+  box.appendChild(div)
 }
 
-function updateCoords(){
- const c=document.querySelector("#coords")
+document.getElementById("btn-origin").onclick=()=>{
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude
+    const lng=pos.coords.longitude
 
- c.innerHTML=`
- Origem: ${origin ? origin.lat.toFixed(5)+","+origin.lng.toFixed(5) : "—"}
- <br>
- Destino: ${destination ? destination.lat.toFixed(5)+","+destination.lng.toFixed(5) : "—"}
- `
+    origin={lat,lng}
+
+    if(originMarker)map.removeLayer(originMarker)
+
+    originMarker=L.marker([lat,lng]).addTo(map).bindPopup("Origem").openPopup()
+
+    map.setView([lat,lng],14)
+
+    updateInfo()
+  })
 }
 
-function setOrigin(p){
+document.getElementById("btn-destination").onclick=()=>{
+  log("Toque no mapa para escolher destino.")
 
- origin=p
+  map.once("click",e=>{
+    const lat=e.latlng.lat
+    const lng=e.latlng.lng
 
- if(originMarker) originMarker.remove()
+    destination={lat,lng}
 
- originMarker=L.marker([p.lat,p.lng]).addTo(map).bindPopup("Origem").openPopup()
+    if(destMarker)map.removeLayer(destMarker)
 
- updateCoords()
+    destMarker=L.marker([lat,lng]).addTo(map).bindPopup("Destino").openPopup()
 
- drawRouteIfReady()
-
+    updateInfo()
+    calcRoute()
+  })
 }
 
-function setDestination(p){
+function updateInfo(){
+  document.getElementById("origin").textContent=
+    origin?`${origin.lat.toFixed(5)},${origin.lng.toFixed(5)}`:"—"
 
- destination=p
-
- if(destMarker) destMarker.remove()
-
- destMarker=L.marker([p.lat,p.lng]).addTo(map).bindPopup("Destino").openPopup()
-
- updateCoords()
-
- drawRouteIfReady()
-
+  document.getElementById("destination").textContent=
+    destination?`${destination.lat.toFixed(5)},${destination.lng.toFixed(5)}`:"—"
 }
 
-async function drawRouteIfReady(){
+async function calcRoute(){
 
- if(!origin || !destination) return
+  if(!origin||!destination)return
 
- const o=`${origin.lng},${origin.lat}`
- const d=`${destination.lng},${destination.lat}`
+  log("Calculando rota...")
 
- const url=`${OSRM_BASE}/route/v1/driving/${o};${d}?overview=full&geometries=geojson`
+  const url=`${OSRM}/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
 
- try{
+  const res=await fetch(url)
+  const data=await res.json()
 
- addBubble("Calculando rota...")
+  const route=data.routes[0]
 
- const res=await fetch(url)
- const data=await res.json()
+  const distance=(route.distance/1000).toFixed(1)
+  const duration=(route.duration/60).toFixed(0)
 
- const route=data.routes[0]
+  routeInfo={
+    distance:Number(distance),
+    duration:Number(duration)
+  }
 
- const coords=route.geometry.coordinates.map(c=>[c[1],c[0]])
+  const coords=route.geometry.coordinates.map(c=>[c[1],c[0]])
 
- if(routeLine) routeLine.remove()
+  if(routeLine)map.removeLayer(routeLine)
 
- routeLine=L.polyline(coords,{color:"blue",weight:5}).addTo(map)
+  routeLine=L.polyline(coords,{color:"blue",weight:5}).addTo(map)
 
- map.fitBounds(routeLine.getBounds(),{padding:[20,20]})
+  map.fitBounds(routeLine.getBounds())
 
- const km=(route.distance/1000).toFixed(1)
- const min=Math.round(route.duration/60)
-
- addBubble(`Rota pronta: ${km} km • ${min} min`)
-
- }catch(e){
-
- addBubble("Erro ao calcular rota")
-
- }
-
+  log(`Rota pronta: ${distance} km • ${duration} min`)
 }
 
-document.querySelector("#btnLocate").onclick=()=>{
+document.getElementById("chat-send").onclick=async()=>{
 
- if(!navigator.geolocation){
+  const input=document.getElementById("chat-input")
 
- addBubble("Geolocalização não suportada")
+  const question=input.value
 
- return
- }
+  if(!question)return
 
- navigator.geolocation.getCurrentPosition(pos=>{
+  log(question)
 
- const p={
- lat:pos.coords.latitude,
- lng:pos.coords.longitude
- }
+  const payload={
+    question,
+    context:{
+      origin,
+      destination,
+      route:routeInfo
+    }
+  }
 
- setOrigin(p)
+  const res=await fetch(`${API_BASE}/agent/query`,{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify(payload)
+  })
 
- map.setView([p.lat,p.lng],14)
+  const data=await res.json()
 
- },()=>{
+  log(data.answer)
 
- addBubble("Não consegui acessar sua localização.")
-
- })
-
-}
-
-let pickDest=false
-
-document.querySelector("#btnSetDest").onclick=()=>{
-
- pickDest=true
-
- addBubble("Toque no mapa para escolher destino.")
-
-}
-
-map.on("click",e=>{
-
- if(!pickDest) return
-
- setDestination({
- lat:e.latlng.lat,
- lng:e.latlng.lng
- })
-
- pickDest=false
-
-})
-
-document.querySelector("#btnClear").onclick=()=>{
-
- origin=null
- destination=null
-
- if(originMarker) originMarker.remove()
- if(destMarker) destMarker.remove()
- if(routeLine) routeLine.remove()
-
- originMarker=null
- destMarker=null
- routeLine=null
-
- updateCoords()
-
- addBubble("Ok. Limpei origem e destino.")
-
-}
-
-document.querySelector("#send").onclick=async()=>{
-
- const q=document.querySelector("#question")
-
- const text=q.value.trim()
-
- if(!text) return
-
- addBubble(text,"user")
-
- q.value=""
-
- const payload={
- question:text,
- context:{
- mode:"driver",
- origin,
- destination,
- locale:"pt-BR"
- }
- }
-
- try{
-
- const res=await fetch(API_BASE+"/agent/query",{
- method:"POST",
- headers:{
- "Content-Type":"application/json"
- },
- body:JSON.stringify(payload)
- })
-
- const data=await res.json()
-
- addBubble(data.answer)
-
- }catch(e){
-
- addBubble("Erro ao falar com agente.")
-
- }
-
+  input.value=""
 }

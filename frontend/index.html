@@ -1,12 +1,46 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Traffic Copilot AI</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/main.js"></script>
-  </body>
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Traffic Copilot AI</title>
+
+</head>
+
+<body>
+
+<h1>Traffic Copilot AI</h1>
+
+<div id="map" style="height:400px;"></div>
+
+<br>
+
+<button id="btn-origin">📍 Minha localização</button>
+
+<button id="btn-destination">🎯 Definir destino</button>
+
+<button id="btn-clear">🧹 Limpar</button>
+
+<p>
+Origem: <span id="origin">—</span>
+</p>
+
+<p>
+Destino: <span id="destination">—</span>
+</p>
+
+<div id="chat-log"></div>
+
+<br>
+
+<input id="chat-input" placeholder="Pergunte: Como está o trânsito?" />
+
+<button id="chat-send">Enviar</button>
+
+<script type="module" src="/main.js"></script>
+
+</body>
 </html>
