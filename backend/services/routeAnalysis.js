@@ -1,27 +1,20 @@
-function analyzeRoute(distanceKm, durationMin) {
+const { detectCongestion } = require("./congestionDetector")
 
-  let trafficLevel
-  let delay
+function analyzeRoute(distanceKm,durationMin){
 
-  if(durationMin < 10){
-    trafficLevel="livre"
-    delay=0
-  }
-  else if(durationMin < 20){
-    trafficLevel="moderado"
-    delay=3
-  }
-  else{
-    trafficLevel="congestionado"
-    delay=7
-  }
+const speed=distanceKm/(durationMin/60)
 
-  return {
-    distanceKm,
-    durationMin,
-    trafficLevel,
-    estimatedDelay:delay
-  }
+const traffic=detectCongestion(speed)
+
+return{
+
+distanceKm,
+durationMin,
+speed:Number(speed.toFixed(1)),
+trafficLevel:traffic.trafficLevel,
+estimatedDelay:traffic.estimatedDelay
+
+}
 
 }
 
