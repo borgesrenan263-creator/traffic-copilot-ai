@@ -1,0 +1,318 @@
+/* =========================================================
+   Traffic Copilot AI (MVP Full Pack) - SAFE BOOT
+========================================================= */
+
+const $ = (id) => document.getElementById(id);
+
+function safeLog(msg){
+  const logBox = $("chatLog");
+  if(!logBox) return;
+  const el = document.createElement("div");
+  el.textContent = msg;
+  logBox.appendChild(el);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+// Mostra qualquer erro de JS na tela
+window.addEventListener("error", (e) => {
+  safeLog("❌ JS error: " + (e?.message || "erro desconhecido"));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  safeLog("❌ Promise error: " + (e?.reason?.message || e?.reason || "erro desconhecido"));
+});
+
+function boot(){
+  // ELEMENTOS
+  const ui = {
+    btnLoc: $("btnLoc"),
+    btnDest: $("btnDest"),
+    btnClear: $("btnClear"),
+    btnSend: $("btnSend"),
+    btnTheme: $("btnTheme"),
+    btnPanic: $("btnPanic"),
+    question: $("question"),
+    chatLog: $("chatLog"),
+    originText: $("originText"),
+    destText: $("destText"),
+    chipMain: $("chipMain"),
+    chipAlt: $("chipAlt"),
+    chipTraffic: $("chipTraffic"),
+  };
+
+  // Marca que o JS subiu
+  safeLog("✅ JS carregou (BOOT OK)");
+
+  // TEMA
+  function loadTheme(){
+    const t = localStorage.getItem("theme") || "dark";
+    document.documentElement.setAttribute("data-theme", t);
+  }
+  function toggleTheme(){
+    const cur = document.documentElement.getAttribute("data-theme") || "dark";
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+    safeLog(`🌓 Tema: ${next}`);
+  }
+
+  // MAPA (Leaflet)
+  let map;
+  let origin = null;
+  let dest = null;
+  let pickingDest = false;
+
+  let originMarker = null;
+  let destMarker = null;
+
+  let routeMain = null;
+  let routeAlt = null;
+  let trafficLayer = null;
+  let poiLayer = null;
+
+  function fmtCoord(latlng){ return `${latlng.lat.toFixed(5)},${latlng.lng.toFixed(5)}`; }
+
+  function safeInvalidate(reason){
+    try{
+      if(map){
+        map.invalidateSize(true);
+      }
+    }catch(e){}
+  }
+
+  function initMap(){
+    if(!window.L){
+      setTimeout(initMap, 80);
+      return;
+    }
+    if(map){
+      safeInvalidate("already-init");
+      return;
+    }
+
+    map = L.map("map", { zoomControl: true }).setView([-20.82, -49.38], 12);
+    window.map = map;
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    poiLayer = L.layerGroup().addTo(map);
+
+    map.on("click", (e) => {
+      if(!pickingDest){
+        safeLog("ℹ️ Toque no mapa ignorado (ative 🎯 Definir destino).");
+        return;
+      }
+      dest = e.latlng;
+      if(destMarker) destMarker.remove();
+      destMarker = L.marker(dest).addTo(map);
+      ui.destText.textContent = fmtCoord(dest);
+      pickingDest = false;
+      safeLog("🎯 Destino definido: " + fmtCoord(dest));
+      if(origin && dest) calcRoutes();
+    });
+
+    safeLog("🗺️ mapa carregado");
+    setTimeout(()=>safeInvalidate("boot+300ms"), 300);
+    setTimeout(()=>safeInvalidate("boot+1500ms"), 1500);
+    window.addEventListener("resize", ()=>safeInvalidate("resize"));
+    window.addEventListener("orientationchange", ()=>safeInvalidate("orientation"));
+  }
+
+  // AÇÕES
+  function clearRoutes(){
+    if(routeMain){ routeMain.remove(); routeMain = null; }
+    if(routeAlt){ routeAlt.remove(); routeAlt = null; }
+    if(trafficLayer){ trafficLayer.remove(); trafficLayer = null; }
+    ui.chipMain.textContent = "Rota principal: —";
+    ui.chipAlt.textContent = "Alternativa: —";
+    ui.chipTraffic.textContent = "Trânsito: —";
+  }
+
+  function clearAll(){
+    origin = null; dest = null; pickingDest = false;
+    if(originMarker){ originMarker.remove(); originMarker = null; }
+    if(destMarker){ destMarker.remove(); destMarker = null; }
+    if(poiLayer){ poiLayer.clearLayers(); }
+    clearRoutes();
+    ui.originText.textContent = "—";
+    ui.destText.textContent = "—";
+    safeLog("🧹 Limpou tudo.");
+  }
+
+  function getMyLocation(){
+    if(!navigator.geolocation){
+      safeLog("❌ GPS não suportado.");
+      return;
+    }
+    safeLog("📡 Pegando GPS...");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        origin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if(originMarker) originMarker.remove();
+        originMarker = L.marker(origin).addTo(map);
+        ui.originText.textContent = fmtCoord(origin);
+        map.setView(origin, 13, { animate:true });
+        safeLog("📍 Origem definida: " + fmtCoord(origin));
+        if(origin && dest) calcRoutes();
+      },
+      () => safeLog("❌ Falha ao pegar GPS (permita localização)."),
+      { enableHighAccuracy:true, timeout:12000, maximumAge:4000 }
+    );
+  }
+
+  function onPickDestination(){
+    pickingDest = true;
+    safeLog("🎯 Toque no mapa para escolher destino.");
+  }
+
+  function osrmUrl(a, b, alternatives){
+    const base = "https://router.project-osrm.org/route/v1/driving/";
+    const coords = `${a.lng},${a.lat};${b.lng},${b.lat}`;
+    const params = new URLSearchParams({
+      overview: "full",
+      geometries: "geojson",
+      steps: "false",
+      alternatives: alternatives ? "true" : "false",
+    });
+    return `${base}${coords}?${params.toString()}`;
+  }
+
+  function drawMainRoute(geo){
+    const latlngs = geo.coordinates.map(([lng,lat]) => [lat,lng]);
+    routeMain = L.polyline(latlngs, { weight: 8, opacity: 0.95 }).addTo(map);
+  }
+  function drawAltRoute(geo){
+    const latlngs = geo.coordinates.map(([lng,lat]) => [lat,lng]);
+    routeAlt = L.polyline(latlngs, { weight: 7, opacity: 0.35, dashArray:"10 10" }).addTo(map);
+  }
+
+  function fitToRoute(geo){
+    const latlngs = geo.coordinates.map(([lng,lat]) => [lat,lng]);
+    map.fitBounds(L.latLngBounds(latlngs).pad(0.18));
+  }
+
+  function drawTrafficOverlay(geo){
+    if(trafficLayer){ trafficLayer.remove(); trafficLayer = null; }
+    const coords = geo.coordinates.map(([lng,lat]) => ({lat,lng}));
+    if(coords.length < 8){
+      ui.chipTraffic.textContent = "Trânsito: baixo (simulado)";
+      return;
+    }
+    const total = coords.length;
+    const redCount = Math.max(1, Math.floor(total * 0.22));
+    const start = Math.floor(total * 0.35);
+    const end = Math.min(total-2, start + redCount);
+    const redLatLngs = [];
+    for(let i=start; i<=end; i++) redLatLngs.push([coords[i].lat, coords[i].lng]);
+    trafficLayer = L.polyline(redLatLngs, { weight: 10, opacity: 0.85 }).addTo(map);
+    ui.chipTraffic.textContent = "Trânsito: MODERADO (simulado)";
+    safeLog("🔴 Trechos congestionados: MODERADO (simulado).");
+  }
+
+  async function calcRoutes(){
+    if(!origin || !dest){
+      safeLog("🧠 Preciso de origem + destino.");
+      return;
+    }
+    clearRoutes();
+    safeLog("🧭 Calculando rotas...");
+
+    try{
+      const res = await fetch(osrmUrl(origin, dest, true));
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if(!data.routes || data.routes.length === 0){
+        safeLog("❌ Nenhuma rota retornada.");
+        return;
+      }
+
+      const main = data.routes[0];
+      const alt = data.routes[1] || null;
+
+      drawMainRoute(main.geometry);
+      fitToRoute(main.geometry);
+
+      const mainKm = main.distance/1000;
+      const mainMin = Math.round(main.duration/60);
+      ui.chipMain.textContent = `Rota principal: ${mainKm.toFixed(1)} km • ${mainMin} min`;
+      safeLog(`✅ Rota principal: ${mainKm.toFixed(1)} km • ${mainMin} min`);
+
+      if(alt){
+        drawAltRoute(alt.geometry);
+        const altKm = alt.distance/1000;
+        const altMin = Math.round(alt.duration/60);
+        ui.chipAlt.textContent = `Alternativa: ${altKm.toFixed(1)} km • ${altMin} min`;
+        safeLog(`🧭 Alternativa: ${altKm.toFixed(1)} km • ${altMin} min`);
+      }else{
+        ui.chipAlt.textContent = "Alternativa: (OSRM não forneceu)";
+        safeLog("🧭 Sem alternativa retornada (OSRM).");
+      }
+
+      drawTrafficOverlay(main.geometry);
+      setTimeout(()=>safeInvalidate("after-route"), 250);
+    }catch(e){
+      safeLog("❌ Erro rota: " + (e?.message || e));
+    }
+  }
+
+  async function panic(){
+    const loc = origin || (map ? map.getCenter() : null);
+    if(!loc){
+      safeLog("🚨 PANIC: sem localização.");
+      return;
+    }
+    const msg = `🚨 EMERGÊNCIA! Minha localização: ${loc.lat.toFixed(5)},${loc.lng.toFixed(5)}`;
+
+    try{
+      if(navigator.clipboard){
+        await navigator.clipboard.writeText(`${loc.lat.toFixed(5)},${loc.lng.toFixed(5)}`);
+        safeLog("📋 Localização copiada.");
+      }
+    }catch(e){}
+
+    if(navigator.share){
+      try{
+        await navigator.share({ title:"PANIC • Traffic Copilot", text: msg });
+        safeLog("📤 Compartilhamento aberto.");
+        return;
+      }catch(e){}
+    }
+
+    const choice = confirm("PANIC: OK = ligar 192 (SAMU)\nCancelar = ligar 190 (Polícia)");
+    window.location.href = choice ? "tel:192" : "tel:190";
+  }
+
+  function ask(){
+    const q = (ui.question.value || "").trim();
+    if(!q) return;
+    safeLog("🧠 Você: " + q);
+    ui.question.value = "";
+    if(!origin || !dest){
+      safeLog("🧭 Preciso de uma rota para analisar. Defina origem e destino.");
+      return;
+    }
+    safeLog("📊 Análise: Trânsito MODERADO (simulado).");
+  }
+
+  // LIGA EVENTOS (e LOGA no clique)
+  ui.btnLoc?.addEventListener("click", ()=>{ safeLog("✅ Clique: Minha localização"); getMyLocation(); });
+  ui.btnDest?.addEventListener("click", ()=>{ safeLog("✅ Clique: Definir destino"); onPickDestination(); });
+  ui.btnClear?.addEventListener("click", ()=>{ safeLog("✅ Clique: Limpar"); clearAll(); });
+  ui.btnSend?.addEventListener("click", ()=>{ safeLog("✅ Clique: Enviar"); ask(); });
+  ui.btnTheme?.addEventListener("click", ()=>{ safeLog("✅ Clique: Tema"); toggleTheme(); });
+  ui.btnPanic?.addEventListener("click", ()=>{ safeLog("✅ Clique: PANIC"); panic(); });
+
+  ui.question?.addEventListener("keydown", (e)=>{ if(e.key === "Enter") ask(); });
+
+  loadTheme();
+  initMap();
+  safeLog("Bem-vindo! Defina origem (📍) e destino (🎯).");
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", boot);
+}else{
+  boot();
+}

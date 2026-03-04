@@ -1,0 +1,469 @@
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+/* =============================
+   STATE
+============================= */
+let map;
+let origin = null;   // {lat, lng}
+let dest = null;     // {lat, lng}
+let pickMode = null; // "dest" | null
+
+let mkOrigin = null;
+let mkDest = null;
+
+let mainRouteLayer = null;     // Leaflet layer group
+let altRouteLayer = null;
+
+let osmLayerGroup = L.layerGroup(); // radares/semáforos/etc
+
+let useTraffic = true;
+let useOSM = true;
+
+/* =============================
+   DOM
+============================= */
+const el = (id) => document.getElementById(id);
+
+const bLoc   = el("btnLoc");
+const bDest  = el("btnDest");
+const bClear = el("btnClear");
+const bSend  = el("btnSend");
+const bTheme = el("btnTheme");
+const bPanic = el("btnPanic");
+
+const tgRadar  = el("tgRadar");
+const tgTraffic= el("tgTraffic");
+
+const originText = el("originText");
+const destText   = el("destText");
+
+const chipMain   = el("chipMain");
+const chipAlt    = el("chipAlt");
+const chipTraffic= el("chipTraffic");
+
+const chatLog = el("chatLog");
+const question = el("question");
+
+/* =============================
+   LOG / UI
+============================= */
+function logLine(icon, text){
+  const line = `${icon} ${text}`;
+  chatLog.textContent = (chatLog.textContent ? chatLog.textContent + "\n" : "") + line;
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function setCoordsUI(){
+  originText.textContent = origin ? `${origin.lat.toFixed(5)},${origin.lng.toFixed(5)}` : "—";
+  destText.textContent   = dest ? `${dest.lat.toFixed(5)},${dest.lng.toFixed(5)}` : "—";
+}
+
+function setChips({main=null, alt=null, traffic=null} = {}){
+  if (main !== null) chipMain.textContent = `Rota principal: ${main}`;
+  if (alt !== null)  chipAlt.textContent  = `Alternativa: ${alt}`;
+  if (traffic !== null) chipTraffic.textContent = `Trânsito: ${traffic}`;
+}
+
+/* =============================
+   THEME
+============================= */
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("tcp_theme", theme);
+}
+
+function initTheme(){
+  const saved = localStorage.getItem("tcp_theme");
+  applyTheme(saved || "dark");
+}
+
+bTheme?.addEventListener("click", ()=>{
+  const cur = document.documentElement.getAttribute("data-theme") || "dark";
+  applyTheme(cur === "dark" ? "light" : "dark");
+});
+
+/* =============================
+   MAP INIT (Leaflet)
+============================= */
+function initMap(){
+  map = L.map("map", { zoomControl: true }).setView([-20.82, -49.38], 12);
+
+  const light = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  });
+
+  const dark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap © CARTO'
+  });
+
+  // escolhe base conforme tema
+  const theme = document.documentElement.getAttribute("data-theme") || "dark";
+  (theme === "dark" ? dark : light).addTo(map);
+
+  // se alternar tema, troca tile automaticamente
+  const observer = new MutationObserver(()=>{
+    const t = document.documentElement.getAttribute("data-theme") || "dark";
+    if (t === "dark"){
+      map.eachLayer(l => { /* noop */ });
+      light.remove();
+      if (!map.hasLayer(dark)) dark.addTo(map);
+    } else {
+      dark.remove();
+      if (!map.hasLayer(light)) light.addTo(map);
+    }
+  });
+  observer.observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
+
+  // group init
+  osmLayerGroup.addTo(map);
+
+  // click no mapa para escolher destino
+  map.on("click", (e)=>{
+    if (pickMode !== "dest") return;
+    dest = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if (mkDest) mkDest.remove();
+    mkDest = L.marker([dest.lat, dest.lng]).addTo(map);
+    pickMode = null;
+    logLine("🎯", "Destino definido.");
+    setCoordsUI();
+    calcRoutes();
+  });
+
+  logLine("🗺️", "mapa carregado");
+  safeInvalidate("boot");
+}
+
+function safeInvalidate(tag){
+  setTimeout(()=>{
+    try{ map?.invalidateSize(true); } catch(e){}
+  }, 350);
+  setTimeout(()=>{
+    try{ map?.invalidateSize(true); } catch(e){}
+  }, 1200);
+}
+
+/* =============================
+   ROUTING (OSRM)
+============================= */
+function osrmUrl(a, b, alternatives=true){
+  const base = "https://router.project-osrm.org/route/v1/driving/";
+  const coords = `${a.lng},${a.lat};${b.lng},${b.lat}`;
+  const params = new URLSearchParams({
+    overview: "full",
+    geometries: "geojson",
+    steps: "false",
+    alternatives: alternatives ? "true" : "false"
+  });
+  return `${base}${coords}?${params.toString()}`;
+}
+
+function clearRoutes(){
+  if (mainRouteLayer) { mainRouteLayer.remove(); mainRouteLayer = null; }
+  if (altRouteLayer)  { altRouteLayer.remove();  altRouteLayer  = null; }
+  setChips({ main:"—", alt:"—", traffic:"—" });
+}
+
+function kmMin(distM, durS){
+  const km = (distM/1000);
+  const min = Math.round(durS/60);
+  return `${km.toFixed(1)} km • ${min} min`;
+}
+
+function trafficLabelFromSeed(seed){
+  // estimativa (não é tempo real)
+  if (!useTraffic) return "DESLIGADO";
+  const x = seed % 100;
+  if (x < 33) return "LEVE (estimado)";
+  if (x < 70) return "MODERADO (estimado)";
+  return "PESADO (estimado)";
+}
+
+function segmentizeAndDraw(geojsonLine, opts){
+  // cria segmentos com cores por "trânsito estimado"
+  const coords = geojsonLine.coordinates; // [lng,lat]
+  const group = L.layerGroup();
+
+  if (!useTraffic){
+    L.polyline(coords.map(c=>[c[1],c[0]]), { weight: 7, opacity: 0.9 }).addTo(group);
+    return group;
+  }
+
+  // segmentar a cada N pontos
+  const step = 10;
+  for (let i=0; i<coords.length-1; i+=step){
+    const slice = coords.slice(i, Math.min(i+step+1, coords.length));
+    const seed = (i*97 + Math.round(coords[i][0]*1000) + Math.round(coords[i][1]*1000)) >>> 0;
+
+    // cores (azul/laranja/vermelho) = estimado
+    const v = seed % 100;
+    let color = "#2b6cff";
+    if (v >= 70) color = "#ff3b30";
+    else if (v >= 33) color = "#ff9f0a";
+
+    L.polyline(slice.map(c=>[c[1],c[0]]), {
+      color,
+      weight: 7,
+      opacity: 0.95,
+      lineCap: "round"
+    }).addTo(group);
+  }
+
+  return group;
+}
+
+async function calcRoutes(){
+  if (!origin || !dest){
+    logLine("🧠", "Preciso de uma rota para analisar.");
+    return;
+  }
+
+  clearRoutes();
+  logLine("🧠", "Calculando rotas (principal + alternativa)...");
+
+  try{
+    const url = osrmUrl(origin, dest, true);
+    const r = await fetch(url);
+    const data = await r.json();
+
+    if (!data?.routes?.length){
+      logLine("⚠️", "OSRM não retornou rotas.");
+      return;
+    }
+
+    const routes = data.routes;
+
+    const main = routes[0];
+    const alt  = routes[1] || null;
+
+    // desenha principal
+    mainRouteLayer = segmentizeAndDraw(main.geometry, {});
+    mainRouteLayer.addTo(map);
+
+    // desenha alternativa (linha mais fina)
+    if (alt){
+      altRouteLayer = L.layerGroup();
+      L.polyline(alt.geometry.coordinates.map(c=>[c[1],c[0]]), {
+        color: "#9aa6c6",
+        weight: 4,
+        opacity: 0.7,
+        dashArray: "10 10"
+      }).addTo(altRouteLayer);
+      altRouteLayer.addTo(map);
+    }
+
+    // zoom para bounds
+    const bounds = L.latLngBounds(
+      main.geometry.coordinates.map(c=>L.latLng(c[1], c[0]))
+    );
+    map.fitBounds(bounds.pad(0.2));
+    safeInvalidate("fitBounds");
+
+    setChips({
+      main: kmMin(main.distance, main.duration),
+      alt: alt ? kmMin(alt.distance, alt.duration) : "—",
+      traffic: trafficLabelFromSeed(Math.round(main.duration))
+    });
+
+    logLine("✅", `Rota principal: ${kmMin(main.distance, main.duration)}`);
+    if (alt) logLine("🧭", `Alternativa: ${kmMin(alt.distance, alt.duration)}`);
+    else logLine("🧭", "Sem alternativa retornada (OSRM não forneceu).");
+
+    // carrega OSM features na área da rota
+    if (useOSM) await loadOSMFeatures(bounds);
+
+    logLine("✅", "rota calculada");
+  } catch(e){
+    logLine("❌", `Erro ao calcular rota: ${String(e?.message || e)}`);
+  }
+}
+
+/* =============================
+   OSM FEATURES (Overpass via backend)
+============================= */
+function boundsToBBox(b){
+  const sw = b.getSouthWest();
+  const ne = b.getNorthEast();
+  // Overpass bbox: (south,west,north,east) em lat/lon
+  return `${sw.lat},${sw.lng},${ne.lat},${ne.lng}`;
+}
+
+function iconEmoji(emoji){
+  return L.divIcon({
+    className: "emoji-marker",
+    html: `<div style="font-size:20px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));">${emoji}</div>`,
+    iconSize: [24,24],
+    iconAnchor: [12,12]
+  });
+}
+
+async function loadOSMFeatures(bounds){
+  try{
+    osmLayerGroup.clearLayers();
+    logLine("🛰️", "Buscando radares/semáforos (OSM)...");
+
+    const bbox = boundsToBBox(bounds);
+    // backend espera bbox = south,west,north,east
+    const url = `http://localhost:8787/api/osm/features?bbox=${encodeURIComponent(bbox)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+
+    if (!data?.ok){
+      logLine("⚠️", `OSM indisponível: ${data?.error || "falha"}`);
+      return;
+    }
+
+    const els = data.elements || [];
+    let count = 0;
+
+    for (const n of els){
+      if (typeof n.lat !== "number" || typeof n.lon !== "number") continue;
+      const tags = n.tags || {};
+      let emoji = "📍";
+      if (tags.highway === "traffic_signals") emoji = "🚦";
+      else if (tags.highway === "speed_camera") emoji = "📸";
+      else if (tags.traffic_calming) emoji = "🐢";
+      else if (tags.highway === "crossing") emoji = "🚸";
+
+      L.marker([n.lat, n.lon], { icon: iconEmoji(emoji) })
+        .bindPopup(`<b>${emoji}</b><br/>${Object.entries(tags).slice(0,6).map(([k,v])=>`${k}: ${v}`).join("<br/>")}`)
+        .addTo(osmLayerGroup);
+
+      count++;
+      if (count > 250) break; // limite MVP
+    }
+
+    logLine("🧩", `OSM: ${count} pontos carregados.`);
+  } catch(e){
+    logLine("⚠️", `OSM erro: ${String(e?.message || e)}`);
+  }
+}
+
+/* =============================
+   PANIC
+============================= */
+async function doPanic(){
+  // NÃO chama emergência automaticamente.
+  // Abre opções: copiar coords / compartilhar / discar 190/192/193
+  try{
+    const pos = await new Promise((resolve, reject)=>{
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:9000 });
+    });
+
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+
+    const link = `https://www.google.com/maps?q=${lat},${lng}`;
+    const msg  = `🚨 EMERGÊNCIA\nLocalização: ${lat.toFixed(6)},${lng.toFixed(6)}\nMapa: ${link}`;
+
+    if (navigator.share){
+      await navigator.share({ title: "PANIC - Localização", text: msg, url: link });
+      logLine("🚨", "Localização compartilhada.");
+    } else {
+      await navigator.clipboard.writeText(msg);
+      logLine("📋", "Copiei sua localização. Cole no WhatsApp/SMS.");
+      alert("Localização copiada! Cole no WhatsApp/SMS.\n\n" + msg);
+    }
+
+    // abre discador (você escolhe)
+    // 190 polícia, 192 SAMU, 193 bombeiros
+    const choice = prompt("Digite: 190 (polícia) / 192 (SAMU) / 193 (bombeiros) ou Cancelar");
+    if (choice === "190" || choice === "192" || choice === "193"){
+      window.location.href = `tel:${choice}`;
+    }
+  } catch(e){
+    logLine("⚠️", "PANIC: não consegui obter GPS (permita localização).");
+  }
+}
+
+/* =============================
+   BUTTONS
+============================= */
+bLoc.addEventListener("click", async ()=>{
+  try{
+    logLine("🛰️", "Pegando GPS...");
+    const pos = await new Promise((resolve, reject)=>{
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:9000 });
+    });
+
+    origin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (mkOrigin) mkOrigin.remove();
+    mkOrigin = L.marker([origin.lat, origin.lng]).addTo(map);
+
+    map.setView([origin.lat, origin.lng], 14);
+    safeInvalidate("gps");
+
+    logLine("📍", `Origem definida: ${origin.lat.toFixed(5)},${origin.lng.toFixed(5)}`);
+    setCoordsUI();
+  } catch(e){
+    logLine("⚠️", "GPS falhou. Ative permissão de localização.");
+  }
+});
+
+bDest.addEventListener("click", ()=>{
+  pickMode = "dest";
+  logLine("🎯", "Toque no mapa para escolher destino.");
+});
+
+bClear.addEventListener("click", ()=>{
+  origin = null; dest = null; pickMode = null;
+  if (mkOrigin) { mkOrigin.remove(); mkOrigin = null; }
+  if (mkDest)   { mkDest.remove();   mkDest   = null; }
+  osmLayerGroup.clearLayers();
+  clearRoutes();
+  setCoordsUI();
+  chatLog.textContent = "";
+  logLine("🧹", "Limpo.");
+});
+
+bSend.addEventListener("click", ()=>{
+  const q = (question.value || "").trim();
+  if (!q) return;
+  logLine("🧑‍💬", `Você: ${q}`);
+
+  // MVP "copilot" local (sem IA externa)
+  if (q.toLowerCase().includes("trânsito")){
+    logLine("📊", `Análise: ${chipTraffic.textContent.replace("Trânsito: ","")}`);
+  } else if (q.toLowerCase().includes("rota")){
+    logLine("🧭", `${chipMain.textContent}`);
+  } else {
+    logLine("🧠", "Dica: pergunte sobre trânsito, rota ou alternativa.");
+  }
+
+  question.value = "";
+});
+
+bPanic.addEventListener("click", doPanic);
+
+tgRadar.addEventListener("change", async ()=>{
+  useOSM = tgRadar.checked;
+  if (!useOSM){
+    osmLayerGroup.clearLayers();
+    logLine("🧩", "OSM: oculto.");
+  } else {
+    logLine("🧩", "OSM: ligado.");
+    if (mainRouteLayer && origin && dest){
+      // tenta recarregar na área da rota
+      // usa bounds da rota principal (se existir)
+      // fallback: bounds atuais do mapa
+      await loadOSMFeatures(map.getBounds());
+    }
+  }
+});
+
+tgTraffic.addEventListener("change", ()=>{
+  useTraffic = tgTraffic.checked;
+  logLine("🚦", `Congestionamento: ${useTraffic ? "ligado (estimado)" : "desligado"}`);
+  // redesenha rotas se já existirem
+  if (origin && dest) calcRoutes();
+});
+
+/* =============================
+   BOOT
+============================= */
+initTheme();
+initMap();
+setCoordsUI();
+setChips({ main:"—", alt:"—", traffic:"—" });

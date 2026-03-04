@@ -1,0 +1,10 @@
+{
+  "radars": [
+    { "name": "Radar 60", "lat": -20.84890, "lng": -49.35250, "speed": 60 },
+    { "name": "Radar 50", "lat": -20.83650, "lng": -49.37080, "speed": 50 }
+  ],
+  "lights": [
+    { "id": "S1", "name": "Semáforo S1", "lat": -20.84270, "lng": -49.36010 },
+    { "id": "S2", "name": "Semáforo S2", "lat": -20.82920, "lng": -49.37220 }
+  ]
+}

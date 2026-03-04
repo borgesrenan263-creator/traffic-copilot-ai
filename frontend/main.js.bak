@@ -1,0 +1,260 @@
+/* Traffic Copilot AI — Frontend MVP (Leaflet + OSRM)
+   - Origem (GPS)
+   - Destino (toque no mapa)
+   - Rota principal (azul)
+   - Rota alternativa (azul transparente)
+   - Fix mobile: invalidateSize
+*/
+
+const $ = (id) => document.getElementById(id);
+
+const btnLoc = $("btnLoc");
+const btnDest = $("btnDest");
+const btnClear = $("btnClear");
+const originText = $("originText");
+const destText = $("destText");
+const chatLog = $("chatLog");
+const mapDiv = $("map");
+
+let map = null;
+let origin = null; // {lat, lng}
+let dest = null;   // {lat, lng}
+
+let originMarker = null;
+let destMarker = null;
+
+let routeMain = null;
+let routeAlt = null;
+
+let picking = null; // "dest" | null
+
+function uiLog(msg) {
+  if (!chatLog) return;
+  const line = document.createElement("div");
+  line.textContent = msg;
+  chatLog.prepend(line);
+}
+
+function fmt(p) {
+  if (!p) return "—";
+  return `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+}
+
+function setCoordsUI() {
+  if (originText) originText.textContent = origin ? fmt(origin) : "—";
+  if (destText) destText.textContent = dest ? fmt(dest) : "—";
+}
+
+function ensureMapVisible(tag="") {
+  // Em mobile, o Leaflet às vezes cria tiles mas não pinta (container muda tamanho)
+  setTimeout(() => {
+    try {
+      if (map) {
+        map.invalidateSize(true);
+      }
+    } catch (e) {}
+  }, 250);
+
+  setTimeout(() => {
+    try {
+      if (map) {
+        map.invalidateSize(true);
+      }
+    } catch (e) {}
+  }, 1200);
+}
+
+function initMapOnce() {
+  if (map) return;
+
+  if (!mapDiv) {
+    console.error("map div not found");
+    return;
+  }
+
+  if (typeof L === "undefined") {
+    uiLog("❌ Leaflet (L) não carregou. Confira import/links do Leaflet.");
+    return;
+  }
+
+  map = L.map("map", {
+    zoomControl: true,
+    preferCanvas: true,
+  }).setView([-20.82, -49.38], 12);
+
+  // Expor para debug
+  window.map = map;
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap",
+  }).addTo(map);
+
+  map.on("click", (e) => {
+    if (picking !== "dest") return;
+
+    dest = { lat: e.latlng.lat, lng: e.latlng.lng };
+    uiLog(`📍 Clique no mapa: ${fmt(dest)}`);
+    setDestMarker(dest);
+
+    picking = null;
+    uiLog("🎯 Ok. Destino definido.");
+    setCoordsUI();
+
+    if (origin && dest) {
+      calcRoutes(origin, dest);
+    } else {
+      uiLog("⚠️ Defina origem e destino para calcular rota.");
+    }
+  });
+
+  uiLog("🗺️ mapa carregado");
+  ensureMapVisible("init");
+}
+
+function setOriginMarker(p) {
+  if (!map) return;
+  if (originMarker) originMarker.remove();
+
+  originMarker = L.marker([p.lat, p.lng], { title: "Origem" }).addTo(map);
+}
+
+function setDestMarker(p) {
+  if (!map) return;
+  if (destMarker) destMarker.remove();
+
+  destMarker = L.marker([p.lat, p.lng], { title: "Destino" }).addTo(map);
+}
+
+function clearRoutes() {
+  if (routeMain) { routeMain.remove(); routeMain = null; }
+  if (routeAlt) { routeAlt.remove(); routeAlt = null; }
+}
+
+async function calcRoutes(a, b) {
+  if (!map) return;
+  clearRoutes();
+
+  uiLog("🧠 Calculando rotas (principal + alternativa)...");
+  // OSRM usa lon,lat
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${a.lng},${a.lat};${b.lng},${b.lat}` +
+    `?overview=full&geometries=geojson&alternatives=true&steps=true`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!data || !data.routes || data.routes.length === 0) {
+      uiLog("❌ Nenhuma rota retornada.");
+      return;
+    }
+
+    const main = data.routes[0];
+    const alt = data.routes[1] || null;
+
+    // Desenhar rota principal (azul forte)
+    routeMain = L.geoJSON(main.geometry, {
+      style: {
+        color: "#2f7bff",
+        weight: 7,
+        opacity: 0.95,
+      },
+    }).addTo(map);
+
+    // Alternativa (azul transparente)
+    if (alt) {
+      routeAlt = L.geoJSON(alt.geometry, {
+        style: {
+          color: "#2f7bff",
+          weight: 6,
+          opacity: 0.35,
+          dashArray: "10 10",
+        },
+      }).addTo(map);
+      uiLog(`🧭 Alternativa disponível: ${(alt.distance/1000).toFixed(1)} km • ${Math.round(alt.duration/60)} min`);
+    } else {
+      uiLog("🧭 Sem alternativa retornada (OSRM não forneceu).");
+    }
+
+    // Fit bounds
+    const group = L.featureGroup([routeMain, routeAlt].filter(Boolean));
+    map.fitBounds(group.getBounds(), { padding: [20, 20] });
+
+    // Log resumo
+    uiLog(`✅ Rota principal: ${(main.distance/1000).toFixed(1)} km • ${Math.round(main.duration/60)} min`);
+
+    ensureMapVisible("after-route");
+
+  } catch (err) {
+    console.error(err);
+    uiLog("❌ Falha ao calcular rota (OSRM). Verifique internet.");
+  }
+}
+
+async function onPickMyLocation() {
+  initMapOnce();
+
+  uiLog("📡 Pegando GPS...");
+  if (!navigator.geolocation) {
+    uiLog("❌ Geolocalização não suportada no navegador.");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      origin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      uiLog(`📍 Origem definida: ${fmt(origin)}`);
+      setOriginMarker(origin);
+      setCoordsUI();
+
+      if (map) {
+        map.setView([origin.lat, origin.lng], 14);
+        ensureMapVisible("after-gps");
+      }
+
+      if (origin && dest) calcRoutes(origin, dest);
+    },
+    (err) => {
+      uiLog(`❌ GPS falhou: ${err.message || err.code}`);
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
+  );
+}
+
+function onPickDestination() {
+  initMapOnce();
+  picking = "dest";
+  uiLog("🧭 Toque no mapa para escolher destino.");
+}
+
+function onClear() {
+  picking = null;
+  origin = null;
+  dest = null;
+
+  if (originMarker) { originMarker.remove(); originMarker = null; }
+  if (destMarker) { destMarker.remove(); destMarker = null; }
+  clearRoutes();
+
+  setCoordsUI();
+  uiLog("🧹 Limpo.");
+  ensureMapVisible("after-clear");
+}
+
+// Bind
+function boot() {
+  initMapOnce();
+  setCoordsUI();
+
+  if (btnLoc) btnLoc.addEventListener("click", onPickMyLocation);
+  if (btnDest) btnDest.addEventListener("click", onPickDestination);
+  if (btnClear) btnClear.addEventListener("click", onClear);
+
+  window.addEventListener("load", () => ensureMapVisible("load"));
+  window.addEventListener("resize", () => ensureMapVisible("resize"));
+  window.addEventListener("orientationchange", () => ensureMapVisible("orientation"));
+}
+
+boot();

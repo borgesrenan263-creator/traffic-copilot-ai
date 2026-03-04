@@ -1,0 +1,66 @@
+const express = require("express");
+
+const app = express();
+app.use(express.json());
+
+app.use((req,res,next)=>{
+  res.setHeader("Access-Control-Allow-Origin","*");
+  res.setHeader("Access-Control-Allow-Methods","GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers","Content-Type");
+  if(req.method==="OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+app.get("/health",(req,res)=>{
+  res.json({ok:true,service:"traffic-copilot-backend"});
+});
+
+app.get("/api/osm/features", async (req,res)=>{
+  try{
+
+    const bbox = req.query.bbox;
+    if(!bbox){
+      return res.status(400).json({ok:false,error:"bbox required"});
+    }
+
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["highway"="traffic_signals"](${bbox});
+        node["highway"="speed_camera"](${bbox});
+        node["traffic_calming"](${bbox});
+        node["highway"="crossing"](${bbox});
+      );
+      out body;
+    `;
+
+    const r = await fetch("https://overpass-api.de/api/interpreter",{
+      method:"POST",
+      headers:{
+        "Content-Type":"text/plain"
+      },
+      body:query
+    });
+
+    const data = await r.json();
+
+    res.json({
+      ok:true,
+      elements:data.elements || []
+    });
+
+  }catch(err){
+
+    res.status(500).json({
+      ok:false,
+      error:String(err)
+    });
+
+  }
+});
+
+const PORT = 8787;
+
+app.listen(PORT,()=>{
+  console.log("Traffic Copilot backend rodando na porta",PORT);
+});

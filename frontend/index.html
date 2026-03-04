@@ -1,46 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Traffic Copilot AI</title>
 
-<meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css" />
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Leaflet -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand">
+          <h1>Traffic Copilot AI</h1>
+          <div class="pill">MVP • Driver Mode</div>
+        </div>
 
-<title>Traffic Copilot AI</title>
+        <div class="actions">
+          <button id="themeBtn" class="iconBtn" type="button" aria-label="Alternar tema">🌙</button>
+          <button id="panicBtn" class="panicBtn" type="button">🚨 PANIC</button>
+        </div>
+      </header>
 
-</head>
+      <section class="mapCard">
+        <div id="map" class="map"></div>
+        <div id="mapOverlay" class="mapOverlay hidden">
+          <div class="spinner"></div>
+          <div id="overlayText">Carregando…</div>
+        </div>
+      </section>
 
-<body>
+      <section class="panel">
+        <div class="btnRow">
+          <button id="locBtn" class="primary" type="button">📍 Minha localização</button>
+          <button id="destBtn" class="secondary" type="button">🎯 Definir destino</button>
+          <button id="clearBtn" class="ghost" type="button">🧹 Limpar</button>
+        </div>
 
-<h1>Traffic Copilot AI</h1>
+        <div class="kv">
+          <div><span>Origem</span><b id="originTxt">—</b></div>
+          <div><span>Destino</span><b id="destTxt">—</b></div>
+        </div>
 
-<div id="map" style="height:400px;"></div>
+        <div class="chips">
+          <div class="chip" id="mainChip">Rota principal: —</div>
+          <div class="chip" id="altChip">Alternativa: —</div>
+          <div class="chip" id="trafficChip">Trânsito: —</div>
+          <div class="chip" id="speedChip">Velocidade: —</div>
+        </div>
 
-<br>
+        <div class="logWrap">
+          <div class="logTitle">Status</div>
+          <pre id="log" class="log"></pre>
+        </div>
 
-<button id="btn-origin">📍 Minha localização</button>
+        <div class="chat">
+          <input id="q" class="q" placeholder="Pergunte: Como está o trânsito?" />
+          <button id="sendBtn" class="send" type="button">Enviar</button>
+        </div>
 
-<button id="btn-destination">🎯 Definir destino</button>
+        <div class="hint">
+          Dica: toque no mapa para escolher destino quando estiver no modo 🎯.
+        </div>
+      </section>
+    </div>
 
-<button id="btn-clear">🧹 Limpar</button>
+    <!-- Leaflet JS -->
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
 
-<p>
-Origem: <span id="origin">—</span>
-</p>
-
-<p>
-Destino: <span id="destination">—</span>
-</p>
-
-<div id="chat-log"></div>
-
-<br>
-
-<input id="chat-input" placeholder="Pergunte: Como está o trânsito?" />
-
-<button id="chat-send">Enviar</button>
-
-<script type="module" src="/main.js"></script>
-
-</body>
+    <script type="module" src="/main.js"></script>
+  </body>
 </html>

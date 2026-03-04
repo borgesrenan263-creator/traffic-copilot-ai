@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traffic Copilot AI</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <h1>Traffic Copilot AI</h1>
+        <div class="badge">MVP • Driver Mode</div>
+      </div>
+
+      <div class="topActions">
+        <button id="btnTheme" class="iconBtn" title="Alternar tema">🌓</button>
+        <button id="btnPanic" class="panicBtn" title="Emergência (compartilhar localização)">🚨 PANIC</button>
+      </div>
+    </header>
+
+    <section class="mapCard">
+      <div id="map"></div>
+    </section>
+
+    <section class="panel">
+      <div class="btnGrid">
+        <button id="btnLoc" class="primary">📍 Minha localização</button>
+        <button id="btnDest" class="secondary">🎯 Definir destino</button>
+        <button id="btnClear" class="ghost">🧹 Limpar</button>
+      </div>
+
+      <div class="coords">
+        <div>Origem: <span id="originText">—</span></div>
+        <div>Destino: <span id="destText">—</span></div>
+      </div>
+
+      <div class="chips">
+        <div class="chip" id="chipMain">Rota principal: —</div>
+        <div class="chip" id="chipAlt">Alternativa: —</div>
+        <div class="chip" id="chipTraffic">Trânsito: —</div>
+      </div>
+
+      <div class="toggles">
+        <label class="toggle">
+          <input type="checkbox" id="tgRadar" checked />
+          <span>Radares/semáforos (OSM)</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="tgTraffic" checked />
+          <span>Congestionamento (estimado)</span>
+        </label>
+      </div>
+
+      <div id="chatLog" class="chatLog"></div>
+
+      <div class="inputRow">
+        <input id="question" placeholder="Pergunte: Como está o trânsito?" />
+        <button id="btnSend" class="sendBtn">Enviar</button>
+      </div>
+
+      <div class="hint">Dica: toque no mapa para escolher destino quando estiver no modo 🎯.</div>
+    </section>
+
+    <script type="module" src="/main.js"></script>
+  </div>
+</body>
+</html>

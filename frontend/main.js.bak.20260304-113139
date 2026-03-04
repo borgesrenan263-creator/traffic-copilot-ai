@@ -1,0 +1,201 @@
+// Traffic Copilot AI - mapa robusto
+
+function waitForLeaflet(){
+  return new Promise((resolve)=>{
+    const check=()=>{
+      if(window.L) resolve();
+      else setTimeout(check,100);
+    };
+    check();
+  });
+}
+
+(async function(){
+
+await waitForLeaflet();
+
+const $ = (id)=>document.getElementById(id)
+
+const chat=$("chatLog")
+const log=(t)=>{
+const d=document.createElement("div")
+d.textContent=t
+chat.appendChild(d)
+}
+
+let map=L.map("map").setView([-20.82,-49.38],12)
+
+L.tileLayer(
+"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+{
+maxZoom:19,
+attribution:"© OpenStreetMap"
+}
+).addTo(map)
+
+log("🗺️ mapa carregado")
+
+let origin=null
+let dest=null
+
+let originMarker=null
+let destMarker=null
+let route=null
+let altRoute=null
+
+function clearRoutes(){
+if(route)route.remove()
+if(altRoute)altRoute.remove()
+route=null
+altRoute=null
+}
+
+function setOrigin(latlng){
+
+origin=latlng
+
+if(originMarker)originMarker.remove()
+
+originMarker=L.marker(latlng).addTo(map)
+
+$("originText").textContent=
+latlng[0].toFixed(5)+","+latlng[1].toFixed(5)
+
+}
+
+function setDest(latlng){
+
+dest=latlng
+
+if(destMarker)destMarker.remove()
+
+destMarker=L.marker(latlng).addTo(map)
+
+$("destText").textContent=
+latlng[0].toFixed(5)+","+latlng[1].toFixed(5)
+
+calcRoute()
+
+}
+
+async function calcRoute(){
+
+if(!origin||!dest)return
+
+clearRoutes()
+
+const url=
+"https://router.project-osrm.org/route/v1/driving/"
++origin[1]+","+origin[0]+";"
++dest[1]+","+dest[0]
++"?overview=full&geometries=geojson&alternatives=true"
+
+const r=await fetch(url)
+
+const data=await r.json()
+
+const routes=data.routes
+
+const main=routes[0].geometry.coordinates.map(c=>[c[1],c[0]])
+
+route=L.polyline(main,{weight:7}).addTo(map)
+
+if(routes[1]){
+
+const alt=routes[1].geometry.coordinates.map(c=>[c[1],c[0]])
+
+altRoute=L.polyline(
+alt,
+{
+weight:6,
+opacity:0.3,
+dashArray:"10 10"
+}
+).addTo(map)
+
+}
+
+map.fitBounds(route.getBounds())
+
+log("✅ rota calculada")
+
+}
+
+$("btnLoc").onclick=()=>{
+
+navigator.geolocation.getCurrentPosition((p)=>{
+
+const latlng=[
+p.coords.latitude,
+p.coords.longitude
+]
+
+setOrigin(latlng)
+
+map.setView(latlng,15)
+
+log("📍 origem definida")
+
+})
+
+}
+
+$("btnDest").onclick=()=>{
+
+log("toque no mapa para escolher destino")
+
+map.once("click",(e)=>{
+
+setDest([e.latlng.lat,e.latlng.lng])
+
+log("🎯 destino definido")
+
+})
+
+}
+
+$("btnClear").onclick=()=>{
+
+origin=null
+dest=null
+
+if(originMarker)originMarker.remove()
+if(destMarker)destMarker.remove()
+
+clearRoutes()
+
+$("originText").textContent="—"
+$("destText").textContent="—"
+
+log("🧹 limpo")
+
+}
+
+})()
+
+/* ---------------------------
+   THEME TOGGLE (Dark / Light)
+--------------------------- */
+
+const btnTheme = document.getElementById("btnTheme");
+const themeLabel = document.getElementById("themeLabel");
+
+function setTheme(t){
+  document.documentElement.setAttribute("data-theme", t);
+  localStorage.setItem("traffic_theme", t);
+  if(themeLabel){
+    themeLabel.textContent = t === "dark" ? "Dark" : "Light";
+  }
+}
+
+const savedTheme = localStorage.getItem("traffic_theme") || "dark";
+setTheme(savedTheme);
+
+if(btnTheme){
+  btnTheme.addEventListener("click", ()=>{
+    const current = document.documentElement.getAttribute("data-theme");
+    const next = current === "dark" ? "light" : "dark";
+    setTheme(next);
+  });
+}
+

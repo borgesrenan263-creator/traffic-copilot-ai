@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Traffic Copilot AI</title>
+
+<link rel="stylesheet" href="/style.css">
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+</head>
+
+<body>
+
+<div id="app">
+
+<h1>Traffic Copilot AI</h1>
+<div class="badge">MVP • Driver Mode</div>
+
+<div id="map"></div>
+
+<div class="panel">
+
+<div class="row">
+<button id="btnLoc" class="btn">📍 Minha localização</button>
+<button id="btnDest" class="btn">🎯 Definir destino</button>
+<button id="btnClear" class="btn">🧹 Limpar</button>
+</div>
+
+<div class="coords">
+<div>Origem: <span id="originText">—</span></div>
+<div>Destino: <span id="destText">—</span></div>
+</div>
+
+<div id="chatLog"></div>
+
+<div class="inputRow">
+<input id="question" placeholder="Pergunte: Como está o trânsito?">
+<button id="btnSend">Enviar</button>
+</div>
+
+</div>
+
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script type="module" src="/main.js"></script>
+
+</body>
+</html>

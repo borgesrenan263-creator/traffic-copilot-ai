@@ -1,23 +1,30 @@
 const express = require("express");
 const cors = require("cors");
 
-const agentRoutes = require("./routes/agent");
-
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-// Healthcheck
+const PORT = process.env.PORT || 8787;
+
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", service: "traffic-copilot-backend" });
+  res.json({ ok: true, service: "traffic-copilot-backend", time: new Date().toISOString() });
 });
 
-// Routes
-app.use("/agent", agentRoutes);
-
-const PORT = 8787;
+/**
+ * Endpoint simples p/ "Panic" (log + retorno).
+ * (Sem enviar nada automaticamente — só serve de prova de vida / auditoria local.)
+ */
+app.post("/panic", (req, res) => {
+  const payload = req.body || {};
+  res.json({
+    ok: true,
+    received: payload,
+    note: "panic received (no automatic messaging).",
+    time: new Date().toISOString(),
+  });
+});
 
 app.listen(PORT, () => {
-  console.log("Traffic Copilot backend rodando na porta", PORT);
+  console.log(`Traffic Copilot backend rodando na porta ${PORT}`);
 });
