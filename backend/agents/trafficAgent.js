@@ -1,39 +1,40 @@
-const { getTrafficInfo } = require("../services/trafficService");
+const { analyzeRoute } = require("../services/routeAnalysis")
 
-function buildContext(payload) {
-  const ctx = payload?.context || {};
+function trafficAgent(payload){
 
-  return {
-    locale: ctx.locale || "pt-BR",
-    mode: ctx.mode || "driver",
-    origin: ctx.origin || null,
-    destination: ctx.destination || null
-  };
-}
+  const ctx = payload.context || {}
 
-function trafficAgent(payload) {
+  const origin = ctx.origin
+  const destination = ctx.destination
 
-  const ctx = buildContext(payload);
+  let answer="Preciso de origem e destino."
 
-  let traffic = null;
+  if(origin && destination){
 
-  if (ctx.origin && ctx.destination) {
-    traffic = getTrafficInfo(ctx.origin, ctx.destination);
-  }
+    const distance=8
+    const duration=10
 
-  let answer = "Preciso de origem e destino para analisar o trânsito.";
+    const analysis=analyzeRoute(distance,duration)
 
-  if (traffic) {
-    answer =
-      `Trânsito ${traffic.trafficStatus}. ` +
-      `A rota pode ter aproximadamente ${traffic.extraMinutes} minutos extras.`;
+    answer=
+`Análise de trânsito:
+
+Rota: ${analysis.distanceKm} km
+Tempo base: ${analysis.durationMin} min
+
+Trânsito: ${analysis.trafficLevel}
+Atraso estimado: +${analysis.estimatedDelay} min
+
+Sugestão:
+Mantenha velocidade constante e evite horários de pico.`
+
   }
 
   return {
     answer,
-    context: ctx,
-    traffic
-  };
+    context:ctx
+  }
+
 }
 
-module.exports = { trafficAgent };
+module.exports={trafficAgent}
