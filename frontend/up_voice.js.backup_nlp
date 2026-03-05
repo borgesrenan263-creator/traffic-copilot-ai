@@ -1,0 +1,338 @@
+/*
+  Traffic Copilot AI - Voice Copilot (Web Speech API)
+  Wake word: "copiloto iniciar"
+  Commands:
+   - "copiloto parar"
+   - "minha localização"
+   - "definir destino"
+   - "destino <endereço>"
+   - "limpar rota"
+   - "pânico"
+*/
+
+(function () {
+  const SR =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition ||
+    window.mozSpeechRecognition ||
+    window.msSpeechRecognition;
+
+  const state = {
+    enabled: false,
+    listening: false,
+    lastText: "",
+    destinationModeArmed: false,
+    lang: "pt-BR",
+  };
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function now() {
+    try {
+      const d = new Date();
+      return `[${d.toTimeString().slice(0, 8)}]`;
+    } catch {
+      return "";
+    }
+  }
+
+  function addStatus(msg, icon = "🎙️") {
+    // tenta usar o logger existente do app (se houver)
+    if (typeof window.addStatus === "function") {
+      window.addStatus(`${icon} ${msg}`);
+      return;
+    }
+
+    // fallback: tenta achar uma área de status (se houver)
+    const box =
+      el("status") ||
+      el("statusBox") ||
+      el("log") ||
+      el("statusArea") ||
+      document.querySelector("[data-status]");
+
+    if (box) {
+      const line = document.createElement("div");
+      line.textContent = `${now()} ${icon} ${msg}`;
+      box.appendChild(line);
+      return;
+    }
+
+    console.log(`[voice] ${msg}`);
+  }
+
+  function clickIfExists(id, label) {
+    const btn = el(id);
+    if (btn) {
+      btn.click();
+      addStatus(`${label} (click)`, "✅");
+      return true;
+    }
+    addStatus(`Botão não encontrado: ${id}`, "⚠️");
+    return false;
+  }
+
+  async function geocodeOSM(query) {
+    const url =
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" +
+      encodeURIComponent(query);
+
+    const res = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+      },
+    });
+
+    if (!res.ok) throw new Error(`Geocode falhou: HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const item = data[0];
+    return {
+      lat: Number(item.lat),
+      lon: Number(item.lon),
+      label: item.display_name || query,
+    };
+  }
+
+  function getLeafletMap() {
+    // tenta achar o mapa global em nomes comuns
+    if (window.map && typeof window.map.fire === "function") return window.map;
+    if (window._map && typeof window._map.fire === "function") return window._map;
+    if (window.leafletMap && typeof window.leafletMap.fire === "function") return window.leafletMap;
+
+    // tenta por heurística: procurar por objetos que tenham "fire" e "setView"
+    for (const k of Object.keys(window)) {
+      const v = window[k];
+      if (v && typeof v === "object" && typeof v.fire === "function" && typeof v.setView === "function") {
+        return v;
+      }
+    }
+    return null;
+  }
+
+  function fireMapClick(lat, lon) {
+    const map = getLeafletMap();
+    if (!map) {
+      addStatus("Não encontrei instância global do Leaflet map para simular click.", "⚠️");
+      return false;
+    }
+
+    try {
+      if (window.L && typeof window.L.latLng === "function") {
+        map.setView([lat, lon], Math.max(map.getZoom?.() || 14, 15));
+        map.fire("click", { latlng: window.L.latLng(lat, lon) });
+        return true;
+      }
+
+      // fallback sem L
+      map.setView([lat, lon], Math.max(map.getZoom?.() || 14, 15));
+      map.fire("click", { latlng: { lat, lng: lon } });
+      return true;
+    } catch (e) {
+      addStatus(`Falha ao simular click no mapa: ${String(e?.message || e)}`, "⚠️");
+      return false;
+    }
+  }
+
+  function normalize(t) {
+    return (t || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  function isWake(text) {
+    return text.includes("copiloto iniciar") || text === "copiloto iniciar";
+  }
+
+  function isStop(text) {
+    return text.includes("copiloto parar") || text === "copiloto parar";
+  }
+
+  function extractAfter(text, keyword) {
+    const idx = text.indexOf(keyword);
+    if (idx < 0) return "";
+    return text.slice(idx + keyword.length).trim();
+  }
+
+  async function handleCommand(raw) {
+    const text = normalize(raw);
+    state.lastText = text;
+
+    // Wake word
+    if (!state.enabled) {
+      if (isWake(text)) {
+        state.enabled = true;
+        addStatus("Copiloto por voz ATIVADO. Diga: minha localização / definir destino / destino <endereço> / limpar rota / pânico.", "🟢");
+      }
+      return;
+    }
+
+    // Stop
+    if (isStop(text)) {
+      state.enabled = false;
+      state.destinationModeArmed = false;
+      addStatus("Copiloto por voz DESATIVADO.", "🔴");
+      return;
+    }
+
+    // comandos básicos
+    if (text.includes("minha localiza") || text.includes("minha localização") || text.includes("definir origem") || text.includes("origem gps")) {
+      clickIfExists("btnLocation", "Minha localização");
+      return;
+    }
+
+    if (text.includes("limpar rota") || text === "limpar") {
+      clickIfExists("btnClear", "Limpar rota");
+      state.destinationModeArmed = false;
+      return;
+    }
+
+    if (text.includes("pânico") || text.includes("panico") || text.includes("panic")) {
+      clickIfExists("btnPanic", "PANIC");
+      return;
+    }
+
+    if (text.includes("definir destino") || text.includes("modo destino")) {
+      // tenta acionar o modo de escolher destino
+      // IDs possíveis: btnDestination / btnDest / btnTarget (mantemos tentativas)
+      const ok =
+        clickIfExists("btnDestination", "Definir destino") ||
+        clickIfExists("btnDest", "Definir destino") ||
+        clickIfExists("btnTarget", "Definir destino");
+
+      state.destinationModeArmed = !!ok;
+      return;
+    }
+
+    // destino por fala: "destino <texto>"
+    if (text.startsWith("destino ")) {
+      const q = extractAfter(text, "destino");
+      if (!q) {
+        addStatus("Fale: destino <endereço ou lugar>", "⚠️");
+        return;
+      }
+
+      addStatus(`Buscando destino no OSM: ${q}`, "🔎");
+      try {
+        const p = await geocodeOSM(q);
+        if (!p) {
+          addStatus("Não encontrei esse destino no OSM.", "⚠️");
+          return;
+        }
+
+        addStatus(`Destino encontrado: ${p.label}`, "📍");
+
+        // arma o modo destino se não estiver armado
+        if (!state.destinationModeArmed) {
+          clickIfExists("btnDestination", "Definir destino") ||
+            clickIfExists("btnDest", "Definir destino") ||
+            clickIfExists("btnTarget", "Definir destino");
+          state.destinationModeArmed = true;
+        }
+
+        const fired = fireMapClick(p.lat, p.lon);
+        if (fired) {
+          addStatus("Destino aplicado no mapa (click simulado).", "✅");
+        } else {
+          addStatus(`Coordenadas destino: ${p.lat}, ${p.lon} (não consegui clicar no mapa)`, "⚠️");
+        }
+      } catch (e) {
+        addStatus(`Erro no geocode: ${String(e?.message || e)}`, "⚠️");
+      }
+      return;
+    }
+
+    // comandos de ajuste rápido
+    if (text.includes("recalcular") || text.includes("atualizar rota")) {
+      // se seu app tiver uma função pública, chamamos
+      if (typeof window.recalcRoute === "function") {
+        window.recalcRoute();
+        addStatus("Rota recalculada.", "✅");
+      } else {
+        addStatus("Não encontrei recalcRoute() global (ok, seu app pode recalcular automaticamente).", "ℹ️");
+      }
+      return;
+    }
+
+    // fallback: se o usuário falar qualquer coisa, joga no campo do chat (se existir)
+    const input = document.querySelector('input[type="text"], input[type="search"], textarea');
+    const send =
+      el("btnSend") ||
+      el("sendBtn") ||
+      document.querySelector('button[type="submit"]');
+
+    if (input && send) {
+      input.value = raw;
+      send.click();
+      addStatus(`Comando enviado no chat: "${raw}"`, "💬");
+      return;
+    }
+
+    addStatus(`Comando não reconhecido: "${raw}"`, "❓");
+  }
+
+  function boot() {
+    if (!SR) {
+      addStatus("Web Speech API não disponível neste navegador. Use Chrome/Android.", "⚠️");
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = state.lang;
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      state.listening = true;
+      addStatus("Voz pronta. Diga: 'copiloto iniciar'", "🎧");
+    };
+
+    rec.onerror = (e) => {
+      addStatus(`Erro de voz: ${e?.error || "desconhecido"}`, "⚠️");
+      // alguns erros param o recognition; tentamos reiniciar
+      try { rec.stop(); } catch {}
+    };
+
+    rec.onend = () => {
+      state.listening = false;
+      // reiniciar automaticamente (importante em Android)
+      setTimeout(() => {
+        try { rec.start(); } catch {}
+      }, 600);
+    };
+
+    rec.onresult = async (event) => {
+      try {
+        const last = event.results[event.results.length - 1];
+        const transcript = last[0]?.transcript?.trim();
+        if (!transcript) return;
+        addStatus(`Ouvi: ${transcript}`, "🗣️");
+        await handleCommand(transcript);
+      } catch (e) {
+        addStatus(`Falha no processamento de voz: ${String(e?.message || e)}`, "⚠️");
+      }
+    };
+
+    // iniciar após interação do usuário (mobile exige gesto)
+    window.__voiceCopilotStart = () => {
+      try { rec.start(); } catch {}
+      addStatus("Voice engine START.", "✅");
+    };
+
+    // dica: você pode chamar manualmente no console
+    addStatus("Para ativar o microfone, toque na tela 1x e diga 'copiloto iniciar'.", "ℹ️");
+
+    // tentativa automática (alguns browsers bloqueiam; ok)
+    setTimeout(() => {
+      try { rec.start(); } catch {}
+    }, 800);
+  }
+
+  // boot quando DOM carregar
+  window.addEventListener("load", boot);
+})();

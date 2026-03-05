@@ -1,0 +1,203 @@
+(function(){
+
+// ========================
+// CONFIG
+// ========================
+const DEST_BTN_ID = "destBtn" // ✅ id real do botão "Definir destino"
+const LANG = "pt-BR"
+
+// ========================
+// SPEECH RECOGNITION
+// ========================
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+if(!SpeechRecognition){
+console.log("voz não suportada")
+return
+}
+const recognition = new SpeechRecognition()
+recognition.lang = LANG
+recognition.continuous = true
+recognition.interimResults = false
+
+let copiloto = false
+
+// ========================
+// LOG + TTS
+// ========================
+function log(msg){
+const box = document.getElementById("log")
+if(box){
+box.textContent += "\n" + msg
+box.scrollTop = box.scrollHeight
+}
+console.log(msg)
+}
+
+function speak(text){
+try{
+if(!("speechSynthesis" in window)) return
+window.speechSynthesis.cancel()
+const u = new SpeechSynthesisUtterance(text)
+u.lang = LANG
+u.rate = 1.05
+u.pitch = 1.0
+window.speechSynthesis.speak(u)
+}catch(e){}
+}
+
+function click(id){
+const el = document.getElementById(id)
+if(el) el.click()
+}
+
+// ========================
+// MAP HELPERS
+// ========================
+function getMap(){
+if(window.map) return window.map
+if(window.leafletMap) return window.leafletMap
+if(window._map) return window._map
+return null
+}
+
+function setDestinoNoMapa(lat, lon){
+const m = getMap()
+if(!m || !window.L){
+log("⚠️ mapa não encontrado (window.map)")
+speak("Mapa não encontrado.")
+return
+}
+
+// 1) entrar no modo "Definir destino"
+click(DEST_BTN_ID)
+
+// 2) aplicar destino via click Leaflet
+m.setView([lat, lon], 15)
+m.fire("click", { latlng: window.L.latLng(lat, lon) })
+
+log("📍 destino aplicado no mapa")
+speak("Destino definido.")
+}
+
+// ========================
+// GEOCODE
+// ========================
+async function geocode(q){
+const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(q)
+const r = await fetch(url, { headers: { "Accept":"application/json" } })
+const j = await r.json()
+if(!j.length) return null
+return { lat:Number(j[0].lat), lon:Number(j[0].lon), label:j[0].display_name }
+}
+
+// ========================
+// NORMALIZAÇÃO
+// ========================
+function normalizar(t){
+return t.toLowerCase().trim()
+.replace(/^ir para /,"destino ")
+.replace(/^ir pro /,"destino ")
+.replace(/^ir pra /,"destino ")
+.replace(/^navegar para /,"destino ")
+.replace(/^rota para /,"destino ")
+.replace(/^ir até /,"destino ")
+}
+
+// ========================
+// COMANDOS
+// ========================
+async function processar(text){
+text = normalizar(text)
+log("🎤 ouvi: " + text)
+
+if(!copiloto){
+if(text.includes("copiloto iniciar")){
+copiloto = true
+log("🟢 copiloto ativado")
+speak("Copiloto ativado.")
+return
+}
+return
+}
+
+if(text.includes("copiloto parar")){
+copiloto = false
+log("🔴 copiloto desligado")
+speak("Copiloto desligado.")
+return
+}
+
+if(text.includes("minha localização") || text.includes("minha localizacao")){
+click("btnLocation")
+speak("Ok. Pegando sua localização.")
+return
+}
+
+if(text.includes("limpar rota")){
+click("btnClear")
+speak("Rota limpa.")
+return
+}
+
+if(text.includes("pânico") || text.includes("panico")){
+click("btnPanic")
+speak("Pânico acionado.")
+return
+}
+
+// DESTINO por voz
+if(text.startsWith("destino ")){
+const lugar = text.replace(/^destino /,"").trim()
+if(!lugar){
+log("⚠️ diga: destino + local")
+speak("Diga destino e o local.")
+return
+}
+
+log("🔎 buscando " + lugar)
+speak("Buscando " + lugar)
+
+const p = await geocode(lugar)
+if(!p){
+log("⚠️ não encontrei")
+speak("Não encontrei esse destino.")
+return
+}
+
+log("📍 " + p.label)
+setDestinoNoMapa(p.lat, p.lon)
+return
+}
+
+// INICIAR TRAJETO (por enquanto: garante modo destino e confirma)
+if(text.includes("iniciar trajeto")){
+click(DEST_BTN_ID)
+log("🧭 modo destino pronto")
+speak("Trajeto pronto.")
+return
+}
+
+log("❓ comando não reconhecido")
+speak("Não entendi. Tente: destino mais o local.")
+}
+
+// ========================
+// EVENTS
+// ========================
+recognition.onresult = async (e) => {
+const r = e.results[e.results.length-1][0].transcript
+await processar(r)
+}
+
+recognition.onend = () => {
+setTimeout(()=> recognition.start(), 500)
+}
+
+// 1 toque pra iniciar (permissão do navegador)
+window.addEventListener("click", () => {
+recognition.start()
+log("🎧 voz pronta")
+speak("Voz pronta. Diga: copiloto iniciar.")
+}, { once:true })
+
+})();

@@ -5,44 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Traffic Copilot AI</title>
 
-    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- Leaflet -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
-    <link rel="stylesheet" href="/style.css" />
   </head>
-
   <body>
     <div class="app">
       <header class="top">
         <div class="brand">
-          <div class="title">Traffic Copilot AI</div>
-          <div class="sub">MVP • Driver Mode</div>
+          <h1>Traffic Copilot AI</h1>
+          <div class="pill">MVP • Driver Mode</div>
         </div>
 
-        <div class="topActions">
-          <button id="btnTheme" class="pill" type="button">🌙</button>
-          <button id="btnPanic" class="pill danger" type="button">🚨 PANIC</button>
+        <div class="actions">
+          <button id="themeBtn" class="iconBtn" type="button" aria-label="Alternar tema">🌙</button>
+          <button id="panicBtn" class="panicBtn" type="button">🚨 PANIC</button>
         </div>
       </header>
 
-      <section class="card mapCard">
+      <section class="mapCard">
         <div id="map" class="map"></div>
-        <div id="mapStatus" class="mapStatus">Carregando...</div>
+        <div id="mapOverlay" class="mapOverlay hidden">
+          <div class="spinner"></div>
+          <div id="overlayText">Carregando…</div>
+        </div>
       </section>
 
-      <section class="card panel">
-        <div class="rowBtns">
-          <button id="btnLocation" class="primary" type="button">📍 Minha localização</button>
+      <section class="panel">
+        <div class="btnRow">
+          <button id="locBtn" class="primary" type="button">📍 Minha localização</button>
           <button id="destBtn" class="secondary" type="button">🎯 Definir destino</button>
-          <button id="btnDriver" class="secondary" type="button">🚗 Driver Mode: OFF</button>
-        </div>
-
-        <div class="rowBtns">
-          <button id="btnClear" class="ghost" type="button">🧹 Limpar</button>
+          <button id="clearBtn" class="ghost" type="button">🧹 Limpar</button>
         </div>
 
         <div class="kv">
@@ -51,17 +50,14 @@
         </div>
 
         <div class="chips">
-          <div class="chip"><span>Rota principal:</span> <b id="routeTxt">—</b></div>
-          <div class="chip"><span>Alternativa:</span> <b id="altTxt">—</b></div>
+          <div class="chip" id="mainChip">Rota principal: —</div>
+          <div class="chip" id="altChip">Alternativa: —</div>
+          <div class="chip" id="trafficChip">Trânsito: —</div>
+          <div class="chip" id="speedChip">Velocidade: —</div>
         </div>
 
-        <div class="chips">
-          <div class="chip"><span>Trânsito:</span> <b id="trafficTxt">—</b></div>
-          <div class="chip"><span>Velocidade:</span> <b id="speedTxt">—</b></div>
-        </div>
-
-        <div class="status">
-          <div class="statusTitle">Status</div>
+        <div class="logWrap">
+          <div class="logTitle">Status</div>
           <pre id="log" class="log"></pre>
         </div>
 
@@ -83,11 +79,7 @@
       crossorigin=""
     ></script>
 
-    <!-- App -->
     <script type="module" src="/main.js"></script>
-
-    <!-- Voice + Driver Mode -->
-    <script src="./up_voice.js"></script>
-    <script src="./driver_mode.js"></script>
+  <script src="./up_voice.js"></script>
   </body>
 </html>

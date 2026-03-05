@@ -1,0 +1,386 @@
+/* =========================================
+   Traffic Copilot AI - Voice Controller
+   - partida/destino por voz
+   - rota via OSRM + polyline Leaflet
+   - fala (speechSynthesis) + log
+   ========================================= */
+
+(() => {
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id)
+
+  function log(msg) {
+    const el = $("log")
+    const line = String(msg ?? "")
+    console.log("[VOICE]", line)
+    if (el) {
+      el.textContent += (el.textContent ? "\n" : "") + line
+      el.scrollTop = el.scrollHeight
+    }
+  }
+
+  function speak(text) {
+    try {
+      const t = String(text || "").trim()
+      if (!t) return
+      if (!("speechSynthesis" in window)) return
+
+      // cancela fala anterior para não embolar
+      window.speechSynthesis.cancel()
+
+      const u = new SpeechSynthesisUtterance(t)
+      u.lang = "pt-BR"
+      u.rate = 1.02
+      u.pitch = 1.0
+      u.volume = 1.0
+      window.speechSynthesis.speak(u)
+    } catch (e) {
+      // silencioso
+    }
+  }
+
+  function norm(s) {
+    return String(s || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+  }
+
+  function hasMap() {
+    return !!(window.map && typeof window.map.setView === "function")
+  }
+
+  function ensureMapOrWarn() {
+    if (!hasMap()) {
+      log("❌ mapa não encontrado (window.map). Reinicie o Vite e recarregue a página.")
+      speak("Mapa não encontrado. Recarregue a página.")
+      return false
+    }
+    return true
+  }
+
+  // ---------- state ----------
+  const state = {
+    active: false,
+    origin: null,      // {lat,lng,label}
+    dest: null,        // {lat,lng,label}
+    routeLayer: null,  // Leaflet polyline
+    originMarker: null,
+    destMarker: null,
+  }
+
+  // ---------- geocoding (Nominatim) ----------
+  async function geocodePlace(q) {
+    const query = String(q || "").trim()
+    if (!query) return null
+
+    // tenta privilegiar sua cidade se o user falar curto
+    const hint = query.match(/sao jose|rio preto|sjrp|s\.jose/i) ? query : `${query} São José do Rio Preto`
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(hint)}`
+
+    const r = await fetch(url, {
+      headers: { "Accept": "application/json" }
+    })
+    const data = await r.json()
+    if (!Array.isArray(data) || !data[0]) return null
+
+    const lat = Number(data[0].lat)
+    const lng = Number(data[0].lon)
+    const label = data[0].display_name || query
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+
+    return { lat, lng, label }
+  }
+
+  // ---------- map ops ----------
+  function clearVoiceRoute() {
+    if (!ensureMapOrWarn()) return
+    try {
+      if (state.routeLayer) {
+        state.routeLayer.remove()
+        state.routeLayer = null
+      }
+    } catch (_) {}
+  }
+
+  function setMarker(kind, lat, lng, label) {
+    if (!ensureMapOrWarn()) return
+
+    try {
+      const L = window.L
+      if (!L) return
+
+      const pos = [lat, lng]
+      if (kind === "origin") {
+        if (state.originMarker) state.originMarker.remove()
+        state.originMarker = L.marker(pos).addTo(window.map).bindPopup(label || "Origem")
+      } else {
+        if (state.destMarker) state.destMarker.remove()
+        state.destMarker = L.marker(pos).addTo(window.map).bindPopup(label || "Destino")
+      }
+    } catch (_) {}
+  }
+
+  function fitToRoute(coordsLatLng) {
+    if (!ensureMapOrWarn()) return
+    try {
+      const L = window.L
+      if (!L || !Array.isArray(coordsLatLng) || coordsLatLng.length < 2) return
+      const b = L.latLngBounds(coordsLatLng)
+      window.map.fitBounds(b, { padding: [30, 30] })
+    } catch (_) {}
+  }
+
+  // ---------- OSRM route ----------
+  async function fetchOsrmRoute(origin, dest) {
+    // OSRM expects lon,lat
+    const o = `${origin.lng},${origin.lat}`
+    const d = `${dest.lng},${dest.lat}`
+    const url = `https://router.project-osrm.org/route/v1/driving/${o};${d}?overview=full&geometries=geojson&alternatives=false&steps=false`
+
+    const r = await fetch(url, { headers: { "Accept": "application/json" } })
+    const data = await r.json()
+
+    if (!data || data.code !== "Ok" || !data.routes || !data.routes[0]) return null
+    return data.routes[0]
+  }
+
+  async function drawRoute() {
+    if (!ensureMapOrWarn()) return
+    if (!state.origin) {
+      log("❗ origem não definida. Diga: 'minha localização' ou 'partida <lugar>'.")
+      speak("Origem não definida. Diga minha localização, ou partida e o lugar.")
+      return
+    }
+    if (!state.dest) {
+      log("❗ destino não definido. Diga: 'destino <lugar>'.")
+      speak("Destino não definido. Diga destino e o lugar.")
+      return
+    }
+
+    clearVoiceRoute()
+    log("🧭 calculando rota (OSRM)...")
+    speak("Calculando rota.")
+
+    try {
+      const route = await fetchOsrmRoute(state.origin, state.dest)
+      if (!route || !route.geometry || !Array.isArray(route.geometry.coordinates)) {
+        log("❌ rota não retornou geometry.")
+        speak("Não consegui calcular a rota.")
+        return
+      }
+
+      const coords = route.geometry.coordinates.map(([lng, lat]) => [lat, lng])
+      const L = window.L
+      if (!L) {
+        log("❌ Leaflet (L) não encontrado em window.")
+        speak("Erro no mapa.")
+        return
+      }
+
+      // polyline (default style do Leaflet)
+      state.routeLayer = L.polyline(coords).addTo(window.map)
+
+      // markers
+      setMarker("origin", state.origin.lat, state.origin.lng, state.origin.label || "Origem")
+      setMarker("dest", state.dest.lat, state.dest.lng, state.dest.label || "Destino")
+
+      // fit bounds
+      fitToRoute(coords)
+
+      // infos
+      const km = (route.distance / 1000)
+      const min = (route.duration / 60)
+      log(`✅ rota desenhada: ${km.toFixed(1)} km • ${min.toFixed(0)} min`)
+      speak(`Rota pronta. ${km.toFixed(1)} quilômetros, aproximadamente ${min.toFixed(0)} minutos.`)
+    } catch (e) {
+      log("❌ erro ao desenhar rota: " + (e?.message || e))
+      speak("Erro ao desenhar rota.")
+    }
+  }
+
+  // ---------- origin/dest setters ----------
+  async function setOriginGPS() {
+    if (!ensureMapOrWarn()) return
+
+    log("📍 obtendo GPS (origem)...")
+    speak("Obtendo sua localização.")
+    if (!navigator.geolocation) {
+      log("❌ geolocation não suportado.")
+      speak("Geolocalização não suportada.")
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude)
+        const lng = Number(pos.coords.longitude)
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          log("❌ GPS inválido.")
+          speak("Localização inválida.")
+          return
+        }
+        state.origin = { lat, lng, label: "Minha localização" }
+        log(`🧷 origem GPS definida: ${lat.toFixed(5)},${lng.toFixed(5)}`)
+        speak("Origem definida.")
+        setMarker("origin", lat, lng, "Minha localização")
+        window.map.setView([lat, lng], Math.max(window.map.getZoom?.() || 14, 14))
+      },
+      (err) => {
+        log("❌ erro GPS: " + (err?.message || err))
+        speak("Não consegui pegar o GPS. Autorize a localização.")
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    )
+  }
+
+  async function setOriginPlace(place) {
+    if (!ensureMapOrWarn()) return
+    log(`🔎 buscando partida: ${place}`)
+    speak("Buscando partida.")
+    const hit = await geocodePlace(place)
+    if (!hit) {
+      log("❌ não achei a partida.")
+      speak("Não encontrei a partida.")
+      return
+    }
+    state.origin = hit
+    log(`🧷 partida definida: ${hit.label}`)
+    speak("Partida definida.")
+    setMarker("origin", hit.lat, hit.lng, "Partida")
+    window.map.setView([hit.lat, hit.lng], 14)
+  }
+
+  async function setDestPlace(place) {
+    if (!ensureMapOrWarn()) return
+    log(`🎯 buscando destino: ${place}`)
+    speak("Buscando destino.")
+    const hit = await geocodePlace(place)
+    if (!hit) {
+      log("❌ não achei o destino.")
+      speak("Não encontrei o destino.")
+      return
+    }
+    state.dest = hit
+    log(`📌 destino definido: ${hit.label}`)
+    speak("Destino definido.")
+    setMarker("dest", hit.lat, hit.lng, "Destino")
+    window.map.setView([hit.lat, hit.lng], 14)
+  }
+
+  // ---------- command processor ----------
+  async function processCommand(raw) {
+    const txt = norm(raw)
+
+    // wake word
+    if (txt.includes("copiloto iniciar") || txt === "copiloto iniciar") {
+      state.active = true
+      log("🟢 copiloto ativado")
+      speak("Copiloto ativado.")
+      return
+    }
+
+    if (!state.active) {
+      // ignorar comandos até ativar
+      return
+    }
+
+    // stop
+    if (txt.includes("copiloto parar") || txt.includes("parar copiloto")) {
+      state.active = false
+      log("⛔ copiloto desativado")
+      speak("Copiloto desativado.")
+      return
+    }
+
+    // origin by GPS
+    if (txt === "minha localizacao" || txt.includes("minha localizacao")) {
+      await setOriginGPS()
+      return
+    }
+
+    // partida <...>
+    if (txt.startsWith("partida ")) {
+      const place = raw.slice(raw.toLowerCase().indexOf("partida") + "partida".length).trim()
+      await setOriginPlace(place)
+      return
+    }
+
+    // destino <...>
+    if (txt.startsWith("destino ")) {
+      const place = raw.slice(raw.toLowerCase().indexOf("destino") + "destino".length).trim()
+      await setDestPlace(place)
+      return
+    }
+
+    // route
+    if (txt.includes("iniciar trajeto") || txt.includes("definir trajeto") || txt.includes("comecar trajeto") || txt.includes("iniciar rota")) {
+      await drawRoute()
+      return
+    }
+
+    // clear voice route only
+    if (txt.includes("limpar rota") || txt.includes("limpar trajeto")) {
+      clearVoiceRoute()
+      log("🧹 rota de voz removida")
+      speak("Rota removida.")
+      return
+    }
+
+    log(`❓ comando não reconhecido: "${raw}"`)
+    speak("Comando não reconhecido.")
+  }
+
+  // ---------- Web Speech API ----------
+  function startRecognition() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) {
+      log("❌ SpeechRecognition não suportado neste navegador.")
+      return
+    }
+
+    const r = new SR()
+    r.lang = "pt-BR"
+    r.interimResults = false
+    r.continuous = true
+
+    r.onresult = async (e) => {
+      try {
+        const last = e.results[e.results.length - 1]
+        const text = last && last[0] ? last[0].transcript : ""
+        const clean = String(text || "").trim()
+        if (!clean) return
+        log("🎤 ouvi: " + clean)
+        await processCommand(clean)
+      } catch (err) {
+        log("❌ erro onresult: " + (err?.message || err))
+      }
+    }
+
+    r.onerror = (e) => {
+      log("❌ erro voz: " + (e?.error || "desconhecido"))
+    }
+
+    r.onend = () => {
+      // reinicia sempre (mobile costuma encerrar)
+      setTimeout(() => {
+        try { r.start() } catch (_) {}
+      }, 600)
+    }
+
+    // inicia no primeiro toque (exigência mobile)
+    window.addEventListener("click", () => {
+      try {
+        r.start()
+        log("🎧 voz pronta")
+        speak("Voz pronta. Diga copiloto iniciar.")
+      } catch (_) {}
+    }, { once: true })
+
+    log("ℹ️ toque na tela 1x para ativar o microfone. Depois diga: 'copiloto iniciar'")
+  }
+
+  // boot
+  startRecognition()
+})()

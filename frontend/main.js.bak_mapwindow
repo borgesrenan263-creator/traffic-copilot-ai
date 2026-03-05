@@ -36,10 +36,6 @@ function initMap() {
 
   map = L.map("map").setView([-20.8487, -49.3522], 13)
 
-  // EXPOSE MAP FOR VOICE (up_voice.js)
-  try { window.map = map } catch(e) {}
-  try { window.L = window.L || L } catch(e) {}
-
   L.tileLayer(
     "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     {

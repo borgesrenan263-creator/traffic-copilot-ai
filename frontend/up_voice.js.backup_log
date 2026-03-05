@@ -1,0 +1,175 @@
+(function () {
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+
+if (!SpeechRecognition) {
+  console.log("Speech recognition não suportado")
+  return
+}
+
+const recognition = new SpeechRecognition()
+
+recognition.lang = "pt-BR"
+recognition.continuous = true
+recognition.interimResults = false
+
+let copilotoAtivo = false
+
+function log(msg) {
+  if (window.addStatus) {
+    window.addStatus(msg)
+  } else {
+    console.log(msg)
+  }
+}
+
+function click(id){
+  const el = document.getElementById(id)
+  if(el) el.click()
+}
+
+async function geocode(q){
+
+  const url =
+  "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" +
+  encodeURIComponent(q)
+
+  const r = await fetch(url)
+  const j = await r.json()
+
+  if(!j.length) return null
+
+  return {
+    lat: Number(j[0].lat),
+    lon: Number(j[0].lon),
+    label: j[0].display_name
+  }
+}
+
+function setDestino(lat,lon){
+
+  if(window.map && window.L){
+
+    window.map.setView([lat,lon],15)
+
+    window.map.fire("click",{latlng:L.latLng(lat,lon)})
+
+    log("📍 destino aplicado no mapa")
+  }
+}
+
+function normalizar(t){
+
+return t
+.toLowerCase()
+.trim()
+.replace("ir para","destino")
+.replace("navegar para","destino")
+.replace("rota para","destino")
+.replace("ir até","destino")
+.replace("levar para","destino")
+
+}
+
+async function processar(text){
+
+text = normalizar(text)
+
+log("🎤 ouvi: "+text)
+
+if(!copilotoAtivo){
+
+if(text.includes("copiloto iniciar")){
+
+copilotoAtivo = true
+
+log("🟢 copiloto ativado")
+
+}
+
+return
+}
+
+if(text.includes("copiloto parar")){
+
+copilotoAtivo=false
+
+log("🔴 copiloto desligado")
+
+return
+}
+
+if(text.includes("minha localização")){
+
+click("btnLocation")
+
+return
+}
+
+if(text.includes("limpar rota")){
+
+click("btnClear")
+
+return
+}
+
+if(text.includes("pânico")||text.includes("panico")){
+
+click("btnPanic")
+
+return
+}
+
+if(text.startsWith("destino")){
+
+const lugar = text.replace("destino","").trim()
+
+if(!lugar){
+
+log("⚠️ diga destino + local")
+
+return
+}
+
+log("🔎 buscando "+lugar)
+
+const p = await geocode(lugar)
+
+if(!p){
+
+log("⚠️ não encontrei")
+
+return
+}
+
+log("📍 "+p.label)
+
+setDestino(p.lat,p.lon)
+
+}
+
+}
+
+recognition.onresult = async (e)=>{
+
+const r = e.results[e.results.length-1][0].transcript
+
+await processar(r)
+
+}
+
+recognition.onend = ()=>{
+
+setTimeout(()=>recognition.start(),500)
+
+}
+
+window.addEventListener("click",()=>{
+
+recognition.start()
+
+log("🎧 voz pronta")
+
+},{once:true})
+
+})();
