@@ -7,13 +7,6 @@ The system analyzes map data and visual signals to identify potential risks such
 This project demonstrates the development of a full-stack web application built entirely through a mobile development environment using Termux, showcasing the ability to design, build, debug, and deploy real-world applications with limited resources.
 
 ---
-
-🌐 Live Demo
-
-(ADD YOUR RENDER LINK HERE)
-
-Example:
-
 https://traffic-copilot-ai.onrender.com
 
 ---
@@ -83,7 +76,7 @@ Version Control
 
 Clone the repository:
 
-git clone https://github.com/yourusername/traffic-copilot-ai.git
+git clone https://github.com/Renanborges-dev/traffic-copilot-ai.git
 
 Enter the project folder:
 
@@ -101,11 +94,7 @@ The app will start locally on:
 
 http://localhost:5173
 
----
 
-📷 Screenshots
-
-(Add screenshots here)
 
 Examples you can include:
 
