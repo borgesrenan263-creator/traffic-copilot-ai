@@ -1,40 +1,93 @@
 🚦 Traffic Copilot AI
 
-Traffic Copilot AI is an AI-powered navigation safety assistant designed to help drivers detect road hazards and navigate more safely in real time.
+"Traffic Copilot AI Banner" (assets/banner.png)
 
-The system analyzes map data and visual signals to identify potential risks such as road hazards, obstacles, or dangerous areas, providing alerts directly through an interactive map interface.
+Traffic Copilot AI is a smart navigation safety assistant designed to help drivers detect road hazards and navigate more safely using real-time map visualization.
+
+The system highlights potential road risks such as obstacles, hazards, or dangerous areas directly on an interactive map interface.
 
 This project demonstrates the development of a full-stack web application built entirely through a mobile development environment using Termux, showcasing the ability to design, build, debug, and deploy real-world applications with limited resources.
 
 ---
+
+🌐 Live Demo
+
+🚀 Deployment coming soon
+
+When available:
+
 https://traffic-copilot-ai.onrender.com
+
+---
+
+📸 Application Preview
+
+Main Interface
+
+"Main Interface" (assets/screenshot-main.png)
+
+Hazard Detection
+
+"Hazard Detection" (assets/screenshot-hazard.png)
+
+Panic Alert
+
+"Panic Alert" (assets/screenshot-panic.png)
+
+---
+
+🎥 Demo
+
+"Traffic Copilot Demo" (assets/demo.gif)
+
+Example showing:
+
+- Map interaction
+- Hazard visualization
+- Emergency panic alert
 
 ---
 
 🧠 Main Features
 
-- 🗺️ Interactive real-time map interface
-- ⚠️ Road hazard detection system
-- 🚨 Panic alert system for emergency situations
-- 📍 Hazard markers integrated with OpenStreetMap data
-- 📱 Progressive Web App (PWA) architecture
-- 🌙 Dark UI designed for better usability while driving
-- ⚡ Fast development using Vite build system
+🗺️ Real-Time Map Interface
+
+Interactive map visualization for route awareness.
+
+⚠️ Hazard Detection System
+
+Detects and highlights possible road hazards.
+
+🚨 Panic Alert Button
+
+Emergency feature to quickly trigger alerts.
+
+📍 Hazard Markers
+
+Integration with map data for risk visualization.
+
+📱 Progressive Web App
+
+Installable mobile-friendly application.
+
+🌙 Dark Mode Interface
+
+Optimized UI for better visibility while driving.
 
 ---
 
 🏗️ System Architecture
 
-The application follows a modern web architecture separating frontend interface and backend API.
-
 User
-↓
+ ↓
 Frontend (PWA - Vite)
-↓
+ ↓
 API Server (Node.js + Express)
-↓
-Map Data & Hazard System
-↓
+ ↓
+Map Data Layer
+ ↓
+Hazard Detection System
+ ↓
 Database / Data Storage
 
 ---
@@ -56,7 +109,7 @@ Backend
 
 Database
 
-- SQLite (used in related backend services)
+- SQLite
 
 APIs / Data Sources
 
@@ -68,40 +121,59 @@ Deployment
 
 Version Control
 
-- Git + GitHub
+- Git
+- GitHub
 
 ---
 
 🚀 Installation
 
-Clone the repository:
+Clone the repository
 
-git clone https://github.com/Renanborges-dev/traffic-copilot-ai.git
+git clone https://github.com/renanborges-dev/traffic-copilot-ai.git
 
-Enter the project folder:
+Enter the project folder
 
 cd traffic-copilot-ai
 
-Install dependencies:
+Install dependencies
 
 npm install
 
-Run development server:
+Start development server
 
 npm run dev
 
-The app will start locally on:
+Local server
 
 http://localhost:5173
 
+---
 
+📂 Project Structure
 
-Examples you can include:
-
-- main map interface
-- hazard detection markers
-- panic alert button
-- mobile interface
+traffic-copilot-ai
+│
+├── backend
+│   ├── server.js
+│   ├── routes
+│   └── controllers
+│
+├── frontend
+│   ├── main.js
+│   ├── index.html
+│   └── styles.css
+│
+├── public
+│
+├── assets
+│   ├── banner.png
+│   ├── screenshot-main.png
+│   ├── screenshot-hazard.png
+│   ├── screenshot-panic.png
+│   └── demo.gif
+│
+└── README.md
 
 ---
 
@@ -109,19 +181,26 @@ Examples you can include:
 
 This project was created to demonstrate:
 
-- Full-stack web development skills
-- API design and integration
-- Interactive map interfaces
-- PWA architecture
-- Real-time hazard visualization systems
+- Full-stack web development
+- Real-time map interfaces
+- Hazard visualization systems
+- Progressive Web App architecture
+- Backend API development
+- Mobile-first development workflows
 
 ---
 
-👨‍💻 Developer
+🧑‍💻 Developer
 
 Renan Borges
 
 Self-taught developer focused on building real-world applications using modern web technologies.
+
+Development environment:
+
+- Mobile development using Termux
+- Git version control
+- Cloud deployment with Render
 
 Main stack:
 
@@ -131,21 +210,39 @@ Main stack:
 - Vite
 - Progressive Web Apps
 
-Development environment:
+---
 
-- Termux (mobile development)
-- GitHub version control
-- Render deployment
+📬 Contact
+
+📧 Email
+borgesrenan263@gmail.com
+
+📱 WhatsApp
++55 17 99784-0031
+
+💻 GitHub
+https://github.com/renanborges-dev
 
 ---
 
-📌 Future Improvements
+🗺️ Roadmap
 
-- AI-based hazard prediction
-- Real-time traffic data integration
+Future improvements planned:
+
+- AI-based road hazard prediction
+- Real-time traffic integration
 - User-reported hazards
 - Voice alert system
-- Route optimization system
+- Route safety scoring
+- Mobile push notifications
+
+---
+
+⭐ Contributing
+
+Contributions, suggestions, and improvements are welcome.
+
+Feel free to open issues or submit pull requests.
 
 ---
 
