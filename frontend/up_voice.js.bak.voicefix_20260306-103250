@@ -1,0 +1,184 @@
+;(() => {
+  // =========================
+  // TRAFFIC COPILOT - VOICE
+  // Fix: always call backend on 8787 + better logs + mobile unlock
+  // =========================
+
+  const API_BASE = "http://127.0.0.1:8787"\;
+
+  const $log = () => document.getElementById("log");
+  const log = (msg) => {
+    const el = $log();
+    if (!el) return console.log(msg);
+    el.textContent += msg + "\n";
+    el.scrollTop = el.scrollHeight;
+    console.log(msg);
+  };
+
+  // Global error visibility
+  window.addEventListener("error", (e) => {
+    log("❌ ERRO JS: " + (e?.message || "desconhecido"));
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    log("❌ PROMISE: " + (e?.reason?.message || e?.reason || "rejeitada"));
+  });
+
+  // TTS
+  let ttsUnlocked = false;
+  const speak = (text) => {
+    try {
+      if (!("speechSynthesis" in window)) return;
+      const u = new SpeechSynthesisUtterance(String(text || ""));
+      u.lang = "pt-BR";
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (_) {}
+  };
+
+  // Recognition
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    log("❌ SpeechRecognition não suportado neste navegador.");
+    return;
+  }
+
+  const r = new SR();
+  r.lang = "pt-BR";
+  r.interimResults = false;
+  r.continuous = true;
+
+  let voiceOn = false;
+  let starting = false;
+
+  const startRecognition = () => {
+    if (starting) return;
+    starting = true;
+    try {
+      r.start();
+      log("🎧 voz pronta");
+    } catch (_) {
+      // Chrome joga InvalidStateError se já estiver rodando
+    } finally {
+      setTimeout(() => (starting = false), 600);
+    }
+  };
+
+  r.onend = () => {
+    if (voiceOn) setTimeout(startRecognition, 500);
+  };
+
+  r.onerror = (e) => {
+    log("❌ voz erro: " + (e?.error || "desconhecido"));
+  };
+
+  r.onresult = async (e) => {
+    try {
+      const last = e.results[e.results.length - 1];
+      const text = (last && last[0] && last[0].transcript) ? last[0].transcript.trim() : "";
+      if (!text) return;
+      log("🗣️ ouvi: " + text);
+      await processVoice(text);
+    } catch (err) {
+      log("❌ processVoice: " + (err?.message || err));
+    }
+  };
+
+  // Helpers to call app functions (must exist on window)
+  const callIf = (fnName) => {
+    const fn = window[fnName];
+    if (typeof fn === "function") return fn();
+    log(`⚠️ função não encontrada: ${fnName}()`);
+    return null;
+  };
+
+  const askBackend = async (text) => {
+    const res = await fetch(`${API_BASE}/api/agent/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    return data;
+  };
+
+  async function processVoice(raw) {
+    const t = raw.toLowerCase();
+
+    // Wake word / toggle
+    if (t.includes("copiloto iniciar") || t === "copiloto iniciar") {
+      voiceOn = true;
+      log("🟢 copiloto ativado");
+      speak("Copiloto ativado. Diga: minha localização ou definir destino.");
+      return;
+    }
+
+    if (!voiceOn) {
+      // ignore until wake word
+      return;
+    }
+
+    // Built-in commands
+    if (t.includes("minha localização") || t.includes("minha localizacao")) {
+      callIf("setMyLocation");
+      speak("Ok. Obtendo sua localização.");
+      return;
+    }
+
+    if (t.includes("definir destino")) {
+      callIf("enableDestinationMode");
+      speak("Modo destino. Toque no mapa para escolher.");
+      return;
+    }
+
+    if (t.includes("iniciar trajeto") || t.includes("iniciar rota")) {
+      callIf("startRoute");
+      speak("Calculando rota.");
+      return;
+    }
+
+    if (t.includes("limpar")) {
+      callIf("clearRoute");
+      speak("Rota limpa.");
+      return;
+    }
+
+    if (t.includes("pânico") || t.includes("panic")) {
+      callIf("triggerPanic");
+      speak("Pânico ativado.");
+      return;
+    }
+
+    // Unknown -> backend agent
+    try {
+      const data = await askBackend(raw);
+      const reply = data?.response || "Ok.";
+      log("🤖 " + reply);
+      speak(reply);
+    } catch (err) {
+      log("❌ backend: " + (err?.message || err));
+      speak("Não consegui falar com o servidor.");
+    }
+  }
+
+  // Mobile unlock (required)
+  log("ℹ️ toque na tela 1x para ativar microfone. Depois diga: 'copiloto iniciar'");
+
+  window.addEventListener("click", () => {
+    if (!ttsUnlocked) {
+      ttsUnlocked = true;
+      speak("Voz pronta. Diga copiloto iniciar.");
+    }
+    if (!voiceOn) {
+      // Start listening even before wake word (it will ignore commands)
+      voiceOn = true;
+      startRecognition();
+      voiceOn = false;
+    } else {
+      startRecognition();
+    }
+  }, { once: true });
+
+  // Keep listening after wake word
+  // (recognition auto-restarts via onend)
+})();
