@@ -1,152 +1,57 @@
 🚦 Traffic Copilot AI
 
-"Traffic Copilot AI Banner" (assets/banner.png)
+AI-powered driving assistant that helps drivers analyze routes, detect hazards, and interact through voice commands.
 
-Traffic Copilot AI is a smart navigation safety assistant designed to help drivers detect road hazards and navigate more safely using real-time map visualization.
-
-The system highlights potential road risks such as obstacles, hazards, or dangerous areas directly on an interactive map interface.
-
-This project demonstrates the development of a full-stack web application built entirely through a mobile development environment using Termux, showcasing the ability to design, build, debug, and deploy real-world applications with limited resources.
+Built as a full-stack project using Node.js, Express and a Vite frontend, designed to simulate an intelligent copilot capable of assisting navigation decisions.
 
 ---
 
-🌐 Live Demo
+# 🌐 Live Demo
 
-🚀 Deployment coming soon
+Frontend  
+https://SEU-FRONTEND.onrender.com
 
-When available:
-
+Backend API  
 https://traffic-copilot-ai.onrender.com
 
----
-
-📸 Application Preview
-
-Main Interface
-
-"Main Interface" (assets/screenshot-main.png)
-
-Hazard Detection
-
-"Hazard Detection" (assets/screenshot-hazard.png)
-
-Panic Alert
-
-"Panic Alert" (assets/screenshot-panic.png)
+Health check
+https://traffic-copilot-ai.onrender.com/health
 
 ---
 
 🎥 Demo
 
-"Traffic Copilot Demo" (assets/demo.gif)
-
-Example showing:
-
-- Map interaction
-- Hazard visualization
-- Emergency panic alert
+"Traffic Copilot Demo" (./demo1.gif)
 
 ---
 
-🧠 Main Features
+🧠 Features
 
-🗺️ Real-Time Map Interface
-
-Interactive map visualization for route awareness.
-
-⚠️ Hazard Detection System
-
-Detects and highlights possible road hazards.
-
-🚨 Panic Alert Button
-
-Emergency feature to quickly trigger alerts.
-
-📍 Hazard Markers
-
-Integration with map data for risk visualization.
-
-📱 Progressive Web App
-
-Installable mobile-friendly application.
-
-🌙 Dark Mode Interface
-
-Optimized UI for better visibility while driving.
+• Voice interaction for driving commands
+• Route calculation using OSRM
+• Hazard detection with OpenStreetMap data
+• Real-time map visualization using Leaflet
+• AI agent endpoint for driving assistance
+• Panic endpoint for safety signal testing
 
 ---
 
-🏗️ System Architecture
-
-User
- ↓
-Frontend (PWA - Vite)
- ↓
-API Server (Node.js + Express)
- ↓
-Map Data Layer
- ↓
-Hazard Detection System
- ↓
-Database / Data Storage
-
----
-
-⚙️ Tech Stack
+🏗️ Architecture
 
 Frontend
-
-- Vite
-- JavaScript
-- HTML5
-- CSS
-- Progressive Web App (PWA)
+Vite + Vanilla JS
+Leaflet Map Interface
+Voice Interaction
 
 Backend
-
-- Node.js
-- Express.js
-
-Database
-
-- SQLite
-
-APIs / Data Sources
-
-- OpenStreetMap
+Node.js
+Express API
+OSRM Routing
+Overpass Hazard Detection
 
 Deployment
-
-- Render
-
-Version Control
-
-- Git
-- GitHub
-
----
-
-🚀 Installation
-
-Clone the repository
-
-git clone https://github.com/renanborges-dev/traffic-copilot-ai.git
-
-Enter the project folder
-
-cd traffic-copilot-ai
-
-Install dependencies
-
-npm install
-
-Start development server
-
-npm run dev
-
-Local server
-
-http://localhost:5173
+Render Web Service (Backend)
+Render Static Site (Frontend)
 
 ---
 
@@ -155,97 +60,77 @@ http://localhost:5173
 traffic-copilot-ai
 │
 ├── backend
-│   ├── server.js
 │   ├── routes
-│   └── controllers
+│   ├── services
+│   └── server.js
 │
 ├── frontend
-│   ├── main.js
-│   ├── index.html
-│   └── styles.css
+│   ├── src
+│   ├── public
+│   └── index.html
 │
-├── public
-│
-├── assets
-│   ├── banner.png
-│   ├── screenshot-main.png
-│   ├── screenshot-hazard.png
-│   ├── screenshot-panic.png
-│   └── demo.gif
-│
-└── README.md
+├── diagrams
+└── docs
 
 ---
 
-🎯 Project Goals
+⚙️ Running Locally
 
-This project was created to demonstrate:
+Clone the repository
 
-- Full-stack web development
-- Real-time map interfaces
-- Hazard visualization systems
-- Progressive Web App architecture
-- Backend API development
-- Mobile-first development workflows
+git clone https://github.com/renanborges-dev/traffic-copilot-ai.git
+
+Install backend
+
+cd backend
+npm install
+npm start
+
+Run frontend
+
+cd frontend
+npm install
+npm run dev
 
 ---
 
-🧑‍💻 Developer
+🔧 Tech Stack
+
+Node.js
+Express
+Vite
+Leaflet
+OSRM
+OpenStreetMap Overpass API
+JavaScript
+
+---
+
+📈 Future Improvements
+
+• Hazard prediction AI
+• Route risk scoring
+• Mobile optimized interface
+• Real-time traffic data
+• Autonomous driving advisory layer
+
+---
+
+👨‍💻 Author
 
 Renan Borges
 
-Self-taught developer focused on building real-world applications using modern web technologies.
-
-Development environment:
-
-- Mobile development using Termux
-- Git version control
-- Cloud deployment with Render
-
-Main stack:
-
-- Node.js
-- Express
-- SQLite
-- Vite
-- Progressive Web Apps
-
----
-
-📬 Contact
-
-📧 Email
-borgesrenan263@gmail.com
-
-📱 WhatsApp
-+55 17 99784-0031
-
-💻 GitHub
+GitHub
 https://github.com/renanborges-dev
 
----
+LinkedIn
+( https://www.linkedin.com/in/renan-borges-790b33195?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app )
 
-🗺️ Roadmap
-
-Future improvements planned:
-
-- AI-based road hazard prediction
-- Real-time traffic integration
-- User-reported hazards
-- Voice alert system
-- Route safety scoring
-- Mobile push notifications
+Email
+borgesrenan263@gmail.com
 
 ---
 
-⭐ Contributing
+⭐ Purpose
 
-Contributions, suggestions, and improvements are welcome.
-
-Feel free to open issues or submit pull requests.
-
----
-
-📄 License
-
-MIT License
+This project was built as part of my journey into Full Stack Development, focusing on building real-world systems combining APIs, geospatial data, and interactive interfaces.
